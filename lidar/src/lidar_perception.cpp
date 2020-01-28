@@ -1,20 +1,20 @@
+//C Includes
+#include <limits>
+//ROS Inlcudes
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <visualization_msgs/Marker.h>
+//PCL Includes
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
-#include <pcl/filters/passthrough.h>
-#include <pcl_conversions/pcl_conversions.h>
 #include <pcl/PCLPointCloud2.h>
 #include <pcl/conversions.h>
-#include <pcl_ros/transforms.h>
-#include <pcl/visualization/cloud_viewer.h>
-#include <pcl_ros/point_cloud.h>
-#include <limits>
-#include <pcl/common/common.h>
-
 #include <pcl/ModelCoefficients.h>
-#include <pcl/point_types.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/visualization/cloud_viewer.h>
+#include <pcl/common/common.h>
 #include <pcl/io/pcd_io.h>
+#include <pcl/filters/passthrough.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/features/normal_3d.h>
@@ -23,17 +23,24 @@
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/segmentation/extract_clusters.h>
-#include <visualization_msgs/Marker.h>
+//PCL ROS Includes
+#include <pcl_ros/transforms.h>
+#include <pcl_ros/point_cloud.h>
 
-
+//typedef's for longer or common variable types
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 typedef pcl::PointXYZ Point;
 
+//FOV Trimming Parameters
 #define LOWERBOUNDS 0
 #define UPPERBOUNDS 5
+//Ground Plane Removal Parameters
 #define GPRDELTA 0.15
-ros::Publisher pub;
+//Debug Parameters
+//#define LOGTOFILE 1
 
+//Global publisher variable
+ros::Publisher pub;
 
 void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 
@@ -43,7 +50,7 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
     // ROS_INFO("Width %d", input->width);
 
 	//Convert to usable form
-    pcl::PCLPointCloud2 pcl_pc2; 
+    pcl::PCLPointCloud2 pcl_pc2;
     PointCloud::Ptr pre(new PointCloud);
     pcl_conversions::toPCL(*input, pcl_pc2);    //Converts from ROS Point Cloud 2 to PCL Point Cloud 2
     pcl::fromPCLPointCloud2(pcl_pc2,*pre);      //Converts from PCL Point Cloud 2 to PCL Point Cloud
@@ -98,6 +105,7 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 	ec.setInputCloud(GPR);
 	ec.extract(cluster_indices);
 	
+    #ifdef LOGTOFILE
 	pcl::PCDWriter writer;
 	int j = 0;
 	for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
@@ -115,6 +123,7 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 		writer.write<pcl::PointXYZ> (ss.str (), *cloud_cluster, false); //*
 		j++;
 	}
+    #endif
 
 
 	//Convert Back to ROS usable format
