@@ -11,20 +11,12 @@
 #include <pcl/point_types.h>
 #include <pcl/PCLPointCloud2.h>
 #include <pcl/conversions.h>
-#include <pcl/ModelCoefficients.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <pcl/visualization/cloud_viewer.h>
 #include <pcl/common/common.h>
-#include <pcl/io/pcd_io.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/filters/extract_indices.h>
-#include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/crop_box.h>
-#include <pcl/features/normal_3d.h>
 #include <pcl/kdtree/kdtree.h>
-#include <pcl/sample_consensus/method_types.h>
-#include <pcl/sample_consensus/model_types.h>
-#include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/segmentation/extract_clusters.h>
 //PCL ROS Includes
 #include <pcl_ros/transforms.h>
@@ -45,15 +37,16 @@ typedef pcl::PointXYZ Point;
 #define MINCLUSTERSIZE 2
 #define MAXCLUSTERSIZE 20
 
-//Bounding Box Scalers
+//Bounding Box Parameters
 #define BOUNDINGBOXSIZESCALER 3
 #define BOUNDINGBOXHEIGHTSCALER 1
 #define MINIMUMBOXSIZE 0.08
+
 //Debug Parameters
 //#define DEBUGOUTPUT
 #define ALLCLOUDS
 
-//Global publisher variable
+//Global Publisher creation
 ros::Publisher fovTrimPub;
 ros::Publisher groundPlaneRemovalPub;
 ros::Publisher markerPub;
@@ -145,6 +138,7 @@ void coverttoPCLBox(Eigen::Vector4f& cbmin, Eigen::Vector4f& cbmax, geometry_msg
 }
 //Clustering Method
 
+//Subscriber Callback
 void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 
     //Input Cloud
@@ -184,6 +178,7 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 
 	int j = 0;
 	visualization_msgs::MarkerArray markers;
+    PointCloud::Ptr restoredCones(new PointCloud);
 	for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
 	{
 		PointCloud::Ptr cloud_cluster (new PointCloud);
@@ -203,6 +198,8 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
         object_marker.color.g=1;
         object_marker.color.a=0.3;
 		markers.markers.push_back(object_marker);
+        //Finished Creatibng Marker for Cone
+
         //Using Marker Variables heavily ties two parts together conside reformating in future
 
         //Begin Cone Restoration
@@ -216,35 +213,38 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 		cb.filter(*croppedCloud);
         //Finished Cone Restoration
 
-        //Publish PointCloud containing restored cone
-		sensor_msgs::PointCloud2 restoredCone;
-		restoredCone = ConvertFromPCL(croppedCloud);
-		restoredPub.publish(restoredCone);
-        
+        *restoredCones+=*croppedCloud;
 
 		//End of Statement
 		j++;
 	}
 
     //Publisher marker Array (Bounding Boxes of cone candidates)
-	ROS_INFO("Marker Array Size: %d", markers.markers.size());
+	ROS_INFO("Marker Array Size: %u", (int)markers.markers.size());
 	markerPub.publish(markers);
 
     #ifdef ALLCLOUDS 
+        //Field of View Trimmed Cloud
+        sensor_msgs::PointCloud2 fovTrimmed;
+        fovTrimmed = ConvertFromPCL(post);
+        fovTrimPub.publish(fovTrimmed);
 
-    sensor_msgs::PointCloud2 fovTrimmed;
-    fovTrimmed = ConvertFromPCL(post);
-    fovTrimPub.publish(fovTrimmed);
+        //Ground Plane Removal Cloud
+        sensor_msgs::PointCloud2 gprRemoved;
+        gprRemoved = ConvertFromPCL(gpr);
+        groundPlaneRemovalPub.publish(gprRemoved);
 
-    sensor_msgs::PointCloud2 gprRemoved;
-    gprRemoved = ConvertFromPCL(gpr);
-    groundPlaneRemovalPub.publish(gprRemoved);
+        //Cone Restoration Cloud
+        sensor_msgs::PointCloud2 restoredConesCloud;
+		restoredConesCloud = ConvertFromPCL(restoredCones);
+        restoredConesCloud.header.frame_id = "velodyne";
+		restoredPub.publish(restoredConesCloud);
 
     #endif
 
 }
 
-
+//Main Method
 int main(int argc, char **argv){
 
     ros::init(argc,argv, "PCL_Listener");
@@ -253,12 +253,12 @@ int main(int argc, char **argv){
 
     //Subscribers
     ros::Subscriber sub = n.subscribe("velodyne_points", 1, PCLcallback); //Create Subscriber to velodyne
-    
+
     //Publishers
     fovTrimPub = n.advertise<PointCloud>("fov_trimmed_cloud",1); //Create Publisher for trimmed cloud
     groundPlaneRemovalPub = n.advertise<PointCloud>("gpr_cloud",1); //Create Publisher for GPR cloud
     markerPub = n.advertise<visualization_msgs::MarkerArray>("cone_markers",1); //Create Publisher for Marker array
-	restoredPub = n.advertise<PointCloud>("restored_cones",5); //Create Publisher for restored cones cloud
+	restoredPub = n.advertise<PointCloud>("restored_cones",1); //Create Publisher for restored cones cloud
     ros::spin();
 
     return(0);
