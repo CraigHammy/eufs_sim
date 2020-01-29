@@ -1,6 +1,8 @@
 //C Includes
 #include <limits>
 #include <string>
+#include <math.h>
+#include<iostream>
 //ROS Inlcudes
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -29,12 +31,15 @@ typedef pcl::PointXYZ Point;
 //FOV Trimming Parameters
 #define LOWERBOUNDS 0
 #define UPPERBOUNDS 5
+
 //Ground Plane Removal Parameters
+#define GPRX 2.0
+#define GPRY 1.0
 #define GPRDELTA 0.15
 
 //Clustering Parameters
 #define CLUSTERTOLERANCE 0.3
-#define MINCLUSTERSIZE 2
+#define MINCLUSTERSIZE 1
 #define MAXCLUSTERSIZE 20
 
 //Bounding Box Parameters
@@ -116,9 +121,9 @@ void getBoundingBox(PointCloud::Ptr inputCloud,geometry_msgs::Pose* pose, geomet
     dimensions->y = xySize*BOUNDINGBOXSIZESCALER;
     dimensions->z = BOUNDINGBOXHEIGHTSCALER;
 
-    ROS_INFO("BOX X %f", dimensions->x);
-    ROS_INFO("BOX Y %f", dimensions->y);
-    ROS_INFO("BOX Z %f", dimensions->z);
+    // ROS_INFO("BOX X %f", dimensions->x);
+    // ROS_INFO("BOX Y %f", dimensions->y);
+    // ROS_INFO("BOX Z %f", dimensions->z);
 
 }
 
@@ -157,14 +162,90 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
     Eigen::Vector4f min, max; //Vectors to hold max and min points
     pcl::getMinMax3D(*post,min,max);
 
+    /*     ROS_INFO("BEFORE");
+        ROS_INFO("MIN x %f", min[0]);
+        ROS_INFO("MIN y %f", min[1]);
+        ROS_INFO("MIN z %f", min[2]);
+
+        ROS_INFO("Max x %f", max[0]);
+        ROS_INFO("Max y %f", max[1]);
+        ROS_INFO("Max z %f", max[2]);
+    */
+
+    //Round Min and max to whole area in round numbers
+    for(int i = 0; i < min.size(); i++){
+        min[i] = floor(min[i]);
+        max[i] = ceil(max[i]);
+    }
+
+    /*
+        ROS_INFO("AFTER");
+        ROS_INFO("MIN x %f", min[0]);
+        ROS_INFO("MIN y %f", min[1]);
+        ROS_INFO("MIN z %f", min[2]);
+
+        ROS_INFO("Max x %f", max[0]);
+        ROS_INFO("Max y %f", max[1]);
+        ROS_INFO("Max z %f", max[2]); 
+    */
+
     PointCloud::Ptr gpr(new PointCloud);
-    passThroughFilter(post, "z", min[2],min[2]+GPRDELTA, gpr, true);
+    for(float fx = min[0]; fx < max[0]; fx += GPRX){ //In X axis
+            //ROS_INFO("in fx loop %f", fx);
+          for(float fy = min[1]; fy < max[1]; fy += GPRY){ //In Y axis
+            //ROS_INFO("in fy loop %f", fy);
+
+            Eigen::Vector4f cbmin,cbmax;
+            cbmin[0]=(float)fx; 
+            cbmin[1]=(float)fy; 
+            cbmin[2]=(float)min[2];
+            cbmin[3]=1.0f;
+
+            cbmax[0]=(float)fx+GPRX; 
+            cbmax[1]=(float)fy+GPRY; 
+            cbmax[2]=(float)max[2];
+            cbmax[3]=1.0f;
+
+            pcl::CropBox<Point> adaptiveRemoval;
+            adaptiveRemoval.setInputCloud(post);
+            adaptiveRemoval.setMax(cbmax);
+            adaptiveRemoval.setMin(cbmin);
+            PointCloud::Ptr croppedCloud(new PointCloud);
+            adaptiveRemoval.filter(*croppedCloud);
+
+            if(croppedCloud->size()>0){
+                Eigen::Vector4f gprmin, gprmax; //Vectors to hold max and min points
+                pcl::getMinMax3D(*croppedCloud,gprmin,gprmax);
+
+                /*                 
+                    ROS_INFO("FX %f FY %f", fx, fy);
+                    ROS_INFO("cloud size %f", croppedCloud->size());
+                    ROS_INFO("MIN x %f", gprmin[0]);
+                    ROS_INFO("MIN y %f", gprmin[1]);
+                    ROS_INFO("MIN z %f", gprmin[2]);
+
+                    ROS_INFO("Max x %f", gprmax[0]);
+                    ROS_INFO("Max y %f", gprmax[1]);
+                    ROS_INFO("Max z %f", gprmax[2]); 
+                */
+
+                PointCloud::Ptr gprSect(new PointCloud);
+                passThroughFilter(croppedCloud, "z", gprmin[2],gprmin[2]+GPRDELTA, gprSect, true);
+
+                //ROS_INFO("after Pass");
+                *gpr+=*gprSect;
+
+            }
+        }         
+    }
+    //Old Method of GPR
+    // PointCloud::Ptr gpr(new PointCloud);
+    // passThroughFilter(post, "z", min[2],min[2]+GPRDELTA, gpr, true);
     //Finished Ground Plane Removal
 
 	//Begin Clustering
     pcl::search::KdTree<Point>::Ptr tree (new pcl::search::KdTree<Point>);
     tree->setInputCloud(gpr);
-
     std::vector<pcl::PointIndices> cluster_indices;
 
 	pcl::EuclideanClusterExtraction<Point> ec;
@@ -173,8 +254,9 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 	ec.setMaxClusterSize(MAXCLUSTERSIZE);
 	ec.setSearchMethod(tree);
 	ec.setInputCloud(gpr);
-	ec.extract(cluster_indices);
+	ec.extract(cluster_indices); //This fails here
     //Finished Clustering
+    
 
 	int j = 0;
 	visualization_msgs::MarkerArray markers;
@@ -190,9 +272,10 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 
         //Create Marker Box for Cone
         visualization_msgs::Marker object_marker;
+        object_marker.header.frame_id="velodyne";
+        object_marker.header.stamp = ros::Time();
         object_marker.ns = "cluster";
         object_marker.id = j;
-        object_marker.header.frame_id="velodyne";
         object_marker.type = visualization_msgs::Marker::CUBE;
         getBoundingBox(cloud_cluster, &object_marker.pose, &object_marker.scale);
         object_marker.color.g=1;
@@ -227,11 +310,13 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
         //Field of View Trimmed Cloud
         sensor_msgs::PointCloud2 fovTrimmed;
         fovTrimmed = ConvertFromPCL(post);
+        fovTrimmed.header.frame_id = "velodyne";
         fovTrimPub.publish(fovTrimmed);
 
         //Ground Plane Removal Cloud
         sensor_msgs::PointCloud2 gprRemoved;
         gprRemoved = ConvertFromPCL(gpr);
+        gprRemoved.header.frame_id = "velodyne";
         groundPlaneRemovalPub.publish(gprRemoved);
 
         //Cone Restoration Cloud
