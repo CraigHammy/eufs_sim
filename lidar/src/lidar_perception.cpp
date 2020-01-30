@@ -77,18 +77,18 @@ void passThroughFilter(PointCloud::Ptr input, std::string filterField, float low
 //Convert Down Method
 void ConvertToPCL(sensor_msgs::PointCloud2ConstPtr input, PointCloud::Ptr output){
 
-    pcl::PCLPointCloud2 pcl_pc2;
-    pcl_conversions::toPCL(*input, pcl_pc2);    //Converts from ROS Point Cloud 2 to PCL Point Cloud 2
-    pcl::fromPCLPointCloud2(pcl_pc2,*output);      //Converts from PCL Point Cloud 2 to PCL Point Cloud
+    pcl::PCLPointCloud2 pclPC2;
+    pcl_conversions::toPCL(*input, pclPC2);    //Converts from ROS Point Cloud 2 to PCL Point Cloud 2
+    pcl::fromPCLPointCloud2(pclPC2,*output);      //Converts from PCL Point Cloud 2 to PCL Point Cloud
 
 }
 
 //Convert Up Method
 void ConvertFromPCL(PointCloud::Ptr input, sensor_msgs::PointCloud2* output){
 
-    pcl::PCLPointCloud2 pcl_pc2;
-    pcl::toPCLPointCloud2(*input,pcl_pc2);      //Convert from PCL Point Cloud to PCL Point Cloud 2
-    pcl_conversions::fromPCL(pcl_pc2,*output);  //Convert from PCL Point Cloud 2 to ROS Point Cloud 2
+    pcl::PCLPointCloud2 pclPC2;
+    pcl::toPCLPointCloud2(*input,pclPC2);      //Convert from PCL Point Cloud to PCL Point Cloud 2
+    pcl_conversions::fromPCL(pclPC2,*output);  //Convert from PCL Point Cloud 2 to ROS Point Cloud 2
 
 }
 
@@ -161,6 +161,8 @@ void coverttoROSBox(Eigen::Vector4f& min, Eigen::Vector4f& max,geometry_msgs::Po
     dimensions->z = (max.z() - min.z());
 
 }
+
+
 //Clustering Method
 
 //Subscriber Callback
@@ -194,38 +196,38 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 
     PointCloud::Ptr gpr(new PointCloud); //Cloud to store new cloud with ground plane removed
     //Initialise vector for crop boxes and set constant value
-    Eigen::Vector4f cbmin,cbmax;
-    cbmin[2]=(float)min[2];
-    cbmin[3]=1.0;
-    cbmax[2]=(float)max[2];
-    cbmax[3]=1.0f;
+    Eigen::Vector4f cbMin,cbMax;
+    cbMin[2]=(float)min[2];
+    cbMin[3]=1.0;
+    cbMax[2]=(float)max[2];
+    cbMax[3]=1.0;
+    pcl::CropBox<Point> adaptiveRemoval;
+	adaptiveRemoval.setInputCloud(post);
     
     for(float fx = min[0]; fx < max[0]; fx += GPRX){ //First in X axis
 		//Set new bounds for x part of box
-		cbmin[0]=(float)fx;
-		cbmax[0]=(float)fx+GPRX;
+		cbMin[0]=(float)fx;
+		cbMax[0]=(float)fx+GPRX;
 		for(float fy = min[1]; fy < max[1]; fy += GPRY){ //Then in Y axis
 
 			//Set new bound for y part of box
-			cbmin[1]=(float)fy;  
-			cbmax[1]=(float)fy+GPRY; 
+			cbMin[1]=(float)fy;  
+			cbMax[1]=(float)fy+GPRY; 
 
 			//Extract section from fov trimmed cloud and store it to cropped cloud
-			pcl::CropBox<Point> adaptiveRemoval;
-			adaptiveRemoval.setInputCloud(post);
-			adaptiveRemoval.setMax(cbmax);
-			adaptiveRemoval.setMin(cbmin);
+			adaptiveRemoval.setMax(cbMax);
+			adaptiveRemoval.setMin(cbMin);
 			PointCloud::Ptr croppedCloud(new PointCloud);
 			adaptiveRemoval.filter(*croppedCloud);
 
 			//If the new cloud has no points in it then we do not need to remove ground plane (no plane exists)
 			if(croppedCloud->size()>0){
 				//Get the minimum and max points in the field (max is not used)
-				Eigen::Vector4f gprmin, gprmax; 
-				pcl::getMinMax3D(*croppedCloud,gprmin,gprmax);
+				Eigen::Vector4f gprMin, gprMax; 
+				pcl::getMinMax3D(*croppedCloud,gprMin,gprMax);
 				//Extract Points that lie above the lowest point + delta
 				PointCloud::Ptr gprSect(new PointCloud);
-				passThroughFilter(croppedCloud, "z", gprmin[2],gprmin[2]+GPRDELTA, gprSect, true);
+				passThroughFilter(croppedCloud, "z", gprMin[2],gprMin[2]+GPRDELTA, gprSect, true);
 
 				*gpr+=*gprSect; //Add filtered cloud to full ground plane removal cloud
 
@@ -233,31 +235,33 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 
 			#ifdef ALLSTAGES
 				//TODO Move to single method (Code dupe l300)
-				visualization_msgs::Marker object_marker;
-				object_marker.header.frame_id="velodyne";
-				object_marker.header.stamp = ros::Time();
-				object_marker.ns = "GPR";
-				object_marker.id = f;
-				object_marker.type = visualization_msgs::Marker::CUBE;
-				coverttoROSBox(cbmin, cbmax, &object_marker.pose, &object_marker.scale);
+				visualization_msgs::Marker objectMarker;
+				objectMarker.header.frame_id="velodyne";
+				objectMarker.header.stamp = ros::Time();
+				objectMarker.ns = "GPR";
+				objectMarker.id = f;
+				objectMarker.type = visualization_msgs::Marker::CUBE;
+				
 				if (f%2 ==1){
-					object_marker.color.b=1;
+					objectMarker.color.b=1;
 				}else{
-					object_marker.color.r=1;
+					objectMarker.color.r=1;
 				}
-				object_marker.color.a=0.3;
-				GPRmarkers.markers.push_back(object_marker);
-
+				objectMarker.color.a=0.3;
+                coverttoROSBox(cbMin, cbMax, &objectMarker.pose, &objectMarker.scale);
+				GPRmarkers.markers.push_back(objectMarker);
+                f++;
 			#endif
-			f++;
+			
         }         
 	}
 
-	//Begin Clustering
+	//Creare tree for search 
     pcl::search::KdTree<Point>::Ptr tree (new pcl::search::KdTree<Point>);
     tree->setInputCloud(gpr);
-    std::vector<pcl::PointIndices> cluster_indices;
-    
+
+    //Begin clustering
+    std::vector<pcl::PointIndices> clusterIndices; //storage for all point indicies of a cluster   
     //Determine all clusters passed on the set parameters
 	pcl::EuclideanClusterExtraction<Point> ec;
 	ec.setClusterTolerance(CLUSTERTOLERANCE);
@@ -265,37 +269,26 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 	ec.setMaxClusterSize(MAXCLUSTERSIZE);
 	ec.setSearchMethod(tree);
 	ec.setInputCloud(gpr);
-	ec.extract(cluster_indices);
+	ec.extract(clusterIndices);
     //Finished Clustering
     
-	//TODO MAKE THIS IFDEF ABLE (only needed for display)
-	int j = 0;
-	visualization_msgs::MarkerArray markers;
+    #ifdef ALLSTAGES
+	    int j = 0;
+	    visualization_msgs::MarkerArray markers;
+    #endif
 
+    pcl::CropBox<Point> cb;
+	cb.setInputCloud(pre);
     PointCloud::Ptr restoredCones(new PointCloud);
-	for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
+	for (std::vector<pcl::PointIndices>::const_iterator it = clusterIndices.begin (); it != clusterIndices.end (); ++it)
 	{
-		PointCloud::Ptr cloud_cluster (new PointCloud);
+		//Covert cluster indicies to point cloud to allow filtering
+        PointCloud::Ptr cloudCluster (new PointCloud);
 		for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit)
-		cloud_cluster->points.push_back(gpr->points[*pit]); 
-		cloud_cluster->width = cloud_cluster->points.size();
-		cloud_cluster->height = 1;
-		cloud_cluster->is_dense = true;
-		//Create Point Cloud of each cluster as this is needed to determine min max
-
-        //TODO Move to single method (Code dupe l230)
-        //Create Marker Box for Cone
-        visualization_msgs::Marker object_marker;
-        object_marker.header.frame_id="velodyne";
-        object_marker.header.stamp = ros::Time();
-        object_marker.ns = "cluster";
-        object_marker.id = j;
-        object_marker.type = visualization_msgs::Marker::CUBE;
-        getBoundingBox(cloud_cluster, &object_marker.pose, &object_marker.scale);
-        object_marker.color.g=1;
-        object_marker.color.a=0.3;
-		markers.markers.push_back(object_marker);
-        //Finished Creating Marker for Cone
+		cloudCluster->points.push_back(gpr->points[*pit]); 
+		cloudCluster->width = cloudCluster->points.size();
+		cloudCluster->height = 1;
+		cloudCluster->is_dense = true;
 
         //Using Marker Variables heavily ties two parts together conside reformating in future
 
@@ -310,24 +303,39 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 			scale by multiplying pcl points 
 			do crop box
 			covert to ros box
-
 		*/
+        //Patch solution for tie between message and bounding box creation
+        geometry_msgs::Pose centrePoint;
+        geometry_msgs::Vector3 boxSize;
+        getBoundingBox(cloudCluster, &centrePoint, &boxSize);
 
         //Begin Cone Restoration
-        pcl::CropBox<Point> cb;
-		cb.setInputCloud(pre);
-        Eigen::Vector4f cbmin, cbmax; //Vectors to hold max and min points
-        coverttoPCLBox(cbmin,cbmax, &object_marker.pose, &object_marker.scale);
-		cb.setMax(cbmax);
-		cb.setMin(cbmin);
+        Eigen::Vector4f cbMin, cbMax; //Vectors to hold max and min points
+        coverttoPCLBox(cbMin,cbMax, &centrePoint, &boxSize);
+		cb.setMax(cbMax);
+		cb.setMin(cbMin);
 		PointCloud::Ptr croppedCloud(new PointCloud);
 		cb.filter(*croppedCloud);
         //Finished Cone Restoration
 
-        *restoredCones+=*croppedCloud;
+        *restoredCones+=*croppedCloud; //Add cropped cloud to restored cone full cloud (this isnt needed, only for visualisation)		
 
-		//End of Statement
-		j++;
+        #ifdef ALLSTAGES
+            //TODO Move to single method (Code dupe l230)
+            //Create Marker Box for Cone
+            visualization_msgs::Marker objectMarker;
+            objectMarker.header.frame_id="velodyne";
+            objectMarker.header.stamp = ros::Time();
+            objectMarker.ns = "cluster";
+            objectMarker.id = j;
+            objectMarker.type = visualization_msgs::Marker::CUBE;
+            objectMarker.color.g=1;
+            objectMarker.color.a=0.3;
+            objectMarker.pose = centrePoint;
+            objectMarker.scale = boxSize;
+            markers.markers.push_back(objectMarker);
+            j++;
+        #endif
 	}
 
 	//If defined will publish all points of pipeline
