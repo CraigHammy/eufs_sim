@@ -162,6 +162,17 @@ void coverttoROSBox(Eigen::Vector4f& min, Eigen::Vector4f& max,geometry_msgs::Po
 
 }
 
+float coneCheck(PointCloud::Ptr inputCloud, float verticalResolution, float horizontalResolution){
+    Eigen::Vector4f centroid;
+    pcl::compute3DCentroid(inputCloud,centroid);
+
+
+
+    float hc,wc,d;
+
+    float eD = 0.5*(hc/(2*d*atan2(verticalResolution,2)))*(wc/(2*d*atan2(horizontalResolution,2)));
+    return eD;
+} 
 
 //Clustering Method
 
