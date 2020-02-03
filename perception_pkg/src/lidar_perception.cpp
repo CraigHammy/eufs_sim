@@ -47,6 +47,9 @@ typedef pcl::PointXYZ Point;
 #define BOUNDINGBOXHEIGHTSCALER 1
 #define MINIMUMBOXSIZE 0.08
 
+//Sensor Parameters
+#define VERTICALRES 0.0349066 //2 //Degrees 
+#define HORIZONTALRES 0.00349066//0.2 //Degrees
 //Debug Parameters
 #define ALLSTAGES
 
@@ -92,38 +95,47 @@ void ConvertFromPCL(PointCloud::Ptr input, sensor_msgs::PointCloud2* output){
 
 }
 
+//Find centre of min and max
+Eigen::Vector4f centrePoint(Eigen::Vector4f min, Eigen::Vector4f max ){
+    return (max + min)/2;
+}
+
+//Get the Size of a box based on min and max
+Eigen::Vector4f boxSize(Eigen::Vector4f min, Eigen::Vector4f max){
+    return max - min;
+}
+
 //Bounding Box Method(Center + Size)
 void getBoundingBox(PointCloud::Ptr input,geometry_msgs::Pose* pose, geometry_msgs::Vector3* dimensions){
 
-    Eigen::Vector4f min, max; //Vectors to hold max and min points
+    Eigen::Vector4f min, max, centre, size; //Vectors to hold max and min points
     pcl::getMinMax3D(*input,min,max); //Get max and min points
-    
-    //Determine the Position of the box based on the mid point of the min and max value
-    pose->position.x = (max.x() + min.x())/2;
-    pose->position.y = (max.y() + min.y())/2;
-    pose->position.z = (max.z() + min.z())/2;
+    centre = centrePoint(min,max);
+    //Get the centre point of the box
+    pose->position.x = centre.x();
+    pose->position.y = centre.y();  
+    pose->position.z = centre.z();
 
     //Determine the larger size of the bounding box 
-    float xDiff = max.x() - min.x();
-    float yDiff = max.y() - min.y();
+    size = boxSize(min,max);
     float xySize = 0;
 
     //If both sizes are smaller than the minimum set it to minimum
-    if(xDiff< MINIMUMBOXSIZE && yDiff < MINIMUMBOXSIZE){
+    if(size.x()< MINIMUMBOXSIZE && size.y() < MINIMUMBOXSIZE){
         xySize = MINIMUMBOXSIZE;
     //If both size are bigger than minimum set it to larger of two
-    }else if(xDiff>MINIMUMBOXSIZE && yDiff>MINIMUMBOXSIZE){
-        if (xDiff>yDiff){
-            xySize = xDiff;
+    }else if(size.x()>MINIMUMBOXSIZE && size.y()>MINIMUMBOXSIZE){
+        if (size.x()>size.y()){
+            xySize = size.x();
         }else{
-            xySize = yDiff;
+            xySize = size.y();
         }
     //If only x is bigger than minimum
-    }else if(xDiff>MINIMUMBOXSIZE){
-        xySize = xDiff;
+    }else if(size.x()>MINIMUMBOXSIZE){
+        xySize = size.x();
     //All other conditions fail y must be biggest
     }else{
-        xySize = yDiff;
+        xySize = size.y();
     }
 
     //Assign bounding box size to message 
@@ -151,27 +163,40 @@ void coverttoPCLBox(Eigen::Vector4f& min, Eigen::Vector4f& max, geometry_msgs::P
 void coverttoROSBox(Eigen::Vector4f& min, Eigen::Vector4f& max,geometry_msgs::Pose* pose, geometry_msgs::Vector3* dimensions){
 
     //Determine the Position of the box based on the mid point of the min and max value
-    pose->position.x = (max.x() + min.x())/2;
-    pose->position.y = (max.y() + min.y())/2;
-    pose->position.z = (max.z() + min.z())/2;
+    Eigen::Vector4f centre, size;
+    centre = centrePoint(min,max);
+
+    pose->position.x = centre.x();
+    pose->position.y = centre.y();  
+    pose->position.z = centre.z();
 
     //Determine the size of the box from difference between max and min value
-    dimensions->x = (max.x() - min.x());
-    dimensions->y = (max.y() - min.y());
-    dimensions->z = (max.z() - min.z());
+    size = boxSize(min,max);
+    dimensions->x = size.x();
+    dimensions->y = size.y();
+    dimensions->z = size.z();
 
 }
 
-float coneCheck(PointCloud::Ptr inputCloud, float verticalResolution, float horizontalResolution){
-    Eigen::Vector4f centroid;
-    pcl::compute3DCentroid(inputCloud,centroid);
-
-
-
+float coneCheck(PointCloud::Ptr input, float verticalResolution, float horizontalResolution){
+    Eigen::Vector4f min, max, centre, size; //Vectors to hold max and min points
+    pcl::getMinMax3D(*input,min,max); //Get max and min points
+    size = boxSize(min,max);
     float hc,wc,d;
 
-    float eD = 0.5*(hc/(2*d*atan2(verticalResolution,2)))*(wc/(2*d*atan2(horizontalResolution,2)));
-    return eD;
+
+    hc = size.z();
+    wc = sqrt( pow( size.x(), 2) + pow( size.y(), 2) );
+    centre = centrePoint(min,max);
+    d = sqrt( pow( centre.x(), 2) + pow( centre.y(), 2) );
+
+    ROS_WARN("hc %f", hc);
+    ROS_WARN("wc %f", wc);
+    ROS_WARN("d %f", d);
+    int eD = roundf(0.5*(hc/(2*d*atan2(verticalResolution,2)))*(wc/(2*d*atan2(horizontalResolution,2))));
+    ROS_WARN("eD Value %f ",eD);
+    ROS_WARN("CLOUD SIZE %d", input->size());
+    return input->size()/eD;
 } 
 
 //Clustering Method
@@ -328,6 +353,9 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 		PointCloud::Ptr croppedCloud(new PointCloud);
 		cb.filter(*croppedCloud);
         //Finished Cone Restoration
+
+        float prob = coneCheck(croppedCloud, VERTICALRES, HORIZONTALRES);
+        ROS_INFO("PROBABILITY OF CONE %f", prob);
 
         *restoredCones+=*croppedCloud; //Add cropped cloud to restored cone full cloud (this isnt needed, only for visualisation)		
 
