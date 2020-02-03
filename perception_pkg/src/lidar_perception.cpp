@@ -39,7 +39,7 @@ typedef pcl::PointXYZ Point;
 
 //Clustering Parameters
 #define CLUSTERTOLERANCE 0.3
-#define MINCLUSTERSIZE 1
+#define MINCLUSTERSIZE 3
 #define MAXCLUSTERSIZE 20
 
 //Bounding Box Parameters
@@ -105,7 +105,7 @@ Eigen::Vector4f boxSize(Eigen::Vector4f min, Eigen::Vector4f max){
     return max - min;
 }
 
-//Bounding Box Method(Center + Size)
+//Bounding Box Method(Center + Size) TODO REFACTOR
 void getBoundingBox(PointCloud::Ptr input,geometry_msgs::Pose* pose, geometry_msgs::Vector3* dimensions){
 
     Eigen::Vector4f min, max, centre, size; //Vectors to hold max and min points
@@ -148,17 +148,20 @@ void getBoundingBox(PointCloud::Ptr input,geometry_msgs::Pose* pose, geometry_ms
 //Covnert Bounding Box Styles
 void coverttoPCLBox(Eigen::Vector4f& min, Eigen::Vector4f& max, geometry_msgs::Pose* pose, geometry_msgs::Vector3* dimensions){
 
+    //Take Pose and Dimensions and convert to minimum point of pcl "The bottom left corner"
     min[0] = pose->position.x - (dimensions->x/2);
     min[1] = pose->position.y - (dimensions->y/2);
     min[2] = pose->position.z - (dimensions->z/2);
     min[3] = 1.0;
 
+    //Take Pose and Dimensions and convert to maximum point of pcl "The top right corner"
     max[0] = pose->position.x + (dimensions->x/2);
     max[1] = pose->position.y + (dimensions->y/2);
     max[2] = pose->position.z + (dimensions->z/2);
     max[3] = 1.0;
     
 }
+
 //Convert Bounding Box to ROS Style
 void coverttoROSBox(Eigen::Vector4f& min, Eigen::Vector4f& max,geometry_msgs::Pose* pose, geometry_msgs::Vector3* dimensions){
 
@@ -166,41 +169,63 @@ void coverttoROSBox(Eigen::Vector4f& min, Eigen::Vector4f& max,geometry_msgs::Po
     Eigen::Vector4f centre, size;
     centre = centrePoint(min,max);
 
+    //Store centre point in ROS Pose data type
     pose->position.x = centre.x();
     pose->position.y = centre.y();  
     pose->position.z = centre.z();
 
     //Determine the size of the box from difference between max and min value
     size = boxSize(min,max);
+
+    //Store box size in ROS Dimension data type
     dimensions->x = size.x();
     dimensions->y = size.y();
     dimensions->z = size.z();
 
 }
 
-float coneCheck(PointCloud::Ptr input, float verticalResolution, float horizontalResolution){
-    Eigen::Vector4f min, max, centre, size; //Vectors to hold max and min points
-    pcl::getMinMax3D(*input,min,max); //Get max and min points
-    size = boxSize(min,max);
-    float hc,wc,d;
-
-
-    hc = size.z();
-    wc = sqrt( pow( size.x(), 2) + pow( size.y(), 2) );
-    centre = centrePoint(min,max);
-    d = sqrt( pow( centre.x(), 2) + pow( centre.y(), 2) );
-
-    ROS_WARN("hc %f", hc);
-    ROS_WARN("wc %f", wc);
-    ROS_WARN("d %f", d);
-    int eD = roundf(0.5*(hc/(2*d*atan2(verticalResolution,2)))*(wc/(2*d*atan2(horizontalResolution,2))));
-    ROS_WARN("eD Value %f ",eD);
-    ROS_WARN("CLOUD SIZE %d", input->size());
-    return input->size()/eD;
-} 
-
 //Clustering Method
+void eucCluster(PointCloud::Ptr input, std::vector<pcl::PointIndices>& clusters, float clusterTolerance, int minimumClusterSize, int maximumClusterSize){
+    //Creare tree for search 
+    pcl::search::KdTree<Point>::Ptr tree (new pcl::search::KdTree<Point>);
+    tree->setInputCloud(input);
 
+    //Determine all clusters passed on the set parameters
+	pcl::EuclideanClusterExtraction<Point> ec;
+	ec.setClusterTolerance(clusterTolerance);
+	ec.setMinClusterSize(minimumClusterSize);
+	ec.setMaxClusterSize(maximumClusterSize);
+	ec.setSearchMethod(tree);
+	ec.setInputCloud(input);
+	ec.extract(clusters);
+
+}
+
+//Based on the size of the cloud determine the probability of it being a cone based on the number of points
+float coneCheck(PointCloud::Ptr input, float verticalResolution, float horizontalResolution){
+
+    Eigen::Vector4f min, max, centre, size; //Vectors to hold max and min points centre point of box and size of box
+    pcl::getMinMax3D(*input,min,max); //Get max and min points
+    size = boxSize(min,max); //Get the size of the box X by Y by Z
+    centre = centrePoint(min,max); //Get the centre point of the box
+    float hc,wc,d; //Variables for storing needed values for cone check 
+
+    hc = size.z(); //Heigh of the cone
+    wc = sqrt( pow( size.x(), 2) + pow( size.y(), 2) ); //Length of Diagonal of base
+    d = sqrt( pow( centre.x(), 2) + pow( centre.y(), 2) ); //Straigh line distance to cone from Lidar
+
+ 
+    //Equation to determine number of point that should be in cone cloud
+    float eD = 0.5*(hc/(2*d*atan2(verticalResolution,2)))*(wc/(2*d*atan2(horizontalResolution,2)));
+    /*
+        ROS_WARN("hc %f", hc);
+        ROS_WARN("wc %f", wc);
+        ROS_WARN("d %f", d);
+        ROS_WARN("eD Value %d ",eD);
+        ROS_WARN("CLOUD SIZE %d", input->size());
+    */
+    return roundf(input->size()/eD);
+} 
 //Subscriber Callback
 void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 
@@ -290,23 +315,14 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 			#endif
 			
         }         
-	}
+	}//END OF GPR LOOP
 
-	//Creare tree for search 
-    pcl::search::KdTree<Point>::Ptr tree (new pcl::search::KdTree<Point>);
-    tree->setInputCloud(gpr);
+
 
     //Begin clustering
-    std::vector<pcl::PointIndices> clusterIndices; //storage for all point indicies of a cluster   
-    //Determine all clusters passed on the set parameters
-	pcl::EuclideanClusterExtraction<Point> ec;
-	ec.setClusterTolerance(CLUSTERTOLERANCE);
-	ec.setMinClusterSize(MINCLUSTERSIZE);
-	ec.setMaxClusterSize(MAXCLUSTERSIZE);
-	ec.setSearchMethod(tree);
-	ec.setInputCloud(gpr);
-	ec.extract(clusterIndices);
-    //Finished Clustering
+    std::vector<pcl::PointIndices> clusterIndices;
+    eucCluster(gpr, clusterIndices, CLUSTERTOLERANCE, MINCLUSTERSIZE, MAXCLUSTERSIZE);
+    //End clustering
     
     #ifdef ALLSTAGES
 	    int j = 0;
