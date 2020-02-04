@@ -58,7 +58,7 @@ typedef pcl::PointXYZ Point;
 	ros::Publisher fovTrimPub;
 	ros::Publisher groundPlaneRemovalPub;
 	ros::Publisher markerPub;
-	ros::Publisher GPRmarkerPub;
+	//ros::Publisher GPRmarkerPub;
 #endif
 ros::Publisher restoredPub;
 
@@ -184,6 +184,60 @@ void coverttoROSBox(Eigen::Vector4f& min, Eigen::Vector4f& max,geometry_msgs::Po
 
 }
 
+void adaptiveGroundPlaneRemoval(PointCloud::Ptr input, PointCloud::Ptr output, float xStepSize, float yStepSize, float removalDelta){
+    //Begins Ground Plane Removal
+    Eigen::Vector4f min, max; //Vectors to hold max and min points
+    pcl::getMinMax3D(*input,min,max);
+
+    //Round Min and max to whole area in round numbers
+    for(int i = 0; i < min.size(); i++){
+        min[i] = floor(min[i]);
+        max[i] = ceil(max[i]);
+    }
+
+    //Initialise vector for crop boxes and set constant value
+    Eigen::Vector4f cbMin,cbMax;
+    cbMin.z()=min.z();
+    cbMin.w()=1.0;
+    cbMax.z()=max.z();
+    cbMax.w()=1.0;
+    pcl::CropBox<Point> adaptiveRemoval;
+	adaptiveRemoval.setInputCloud(input);
+
+    for(float fx = min.x(); fx < max.x(); fx += xStepSize){ //First in X axis
+		//Set new bounds for x part of box
+		cbMin.x()=fx;
+		cbMax.x()=fx+xStepSize;
+		for(float fy = min.y(); fy < max.y(); fy += yStepSize){ //Then in Y axis
+
+			//Set new bound for y part of box
+			cbMin.y()=fy;  
+			cbMax.y()=fy+yStepSize; 
+
+			//Extract section from fov trimmed cloud and store it to cropped cloud
+			adaptiveRemoval.setMax(cbMax);
+			adaptiveRemoval.setMin(cbMin);
+			PointCloud::Ptr croppedCloud(new PointCloud);
+			adaptiveRemoval.filter(*croppedCloud);
+
+			//If the new cloud has no points in it then we do not need to remove ground plane (no plane exists)
+			if(croppedCloud->size()>0){
+
+				//Get the minimum and max points in the field (max is not used)
+				Eigen::Vector4f gprMin, gprMax; 
+				pcl::getMinMax3D(*croppedCloud,gprMin,gprMax);
+
+				//Extract Points that lie above the lowest point + delta
+				PointCloud::Ptr gprSect(new PointCloud);
+				passThroughFilter(croppedCloud, "z", gprMin.z(),gprMin.z()+removalDelta, gprSect, true);
+
+				*output+=*gprSect; //Add filtered cloud to full ground plane removal cloud
+			}	
+			
+        }         
+	}//END OF GPR LOOP
+}
+
 //Clustering Method
 void eucCluster(PointCloud::Ptr input, std::vector<pcl::PointIndices>& clusters, float clusterTolerance, int minimumClusterSize, int maximumClusterSize){
     //Creare tree for search 
@@ -225,7 +279,8 @@ float coneCheck(PointCloud::Ptr input, float verticalResolution, float horizonta
         ROS_WARN("CLOUD SIZE %d", input->size());
     */
     return roundf(input->size()/eD);
-} 
+}
+
 //Subscriber Callback
 void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 
@@ -240,84 +295,12 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
     passThroughFilter(pre, "x", LOWERBOUNDS, UPPERBOUNDS, post, false);
     //Finished FOV Trimming
 
-	//Begins Ground Plane Removal
-    Eigen::Vector4f min, max; //Vectors to hold max and min points
-    pcl::getMinMax3D(*post,min,max);
+    //Begin Ground Plane Removal
+    PointCloud::Ptr gpr (new PointCloud);
+    adaptiveGroundPlaneRemoval(post, gpr, GPRX, GPRY, GPRDELTA);
+    //Finished Ground Plane Removal
 
-    //Round Min and max to whole area in round numbers
-    for(int i = 0; i < min.size(); i++){
-        min[i] = floor(min[i]);
-        max[i] = ceil(max[i]);
-    }
-
-	#ifdef ALLSTAGES
-    	visualization_msgs::MarkerArray GPRmarkers; //Marker array message to show how cloud is split
-    	int f =0; //Initialise marker id variable
-	#endif
-
-    PointCloud::Ptr gpr(new PointCloud); //Cloud to store new cloud with ground plane removed
-    //Initialise vector for crop boxes and set constant value
-    Eigen::Vector4f cbMin,cbMax;
-    cbMin[2]=(float)min[2];
-    cbMin[3]=1.0;
-    cbMax[2]=(float)max[2];
-    cbMax[3]=1.0;
-    pcl::CropBox<Point> adaptiveRemoval;
-	adaptiveRemoval.setInputCloud(post);
-    
-    for(float fx = min[0]; fx < max[0]; fx += GPRX){ //First in X axis
-		//Set new bounds for x part of box
-		cbMin[0]=(float)fx;
-		cbMax[0]=(float)fx+GPRX;
-		for(float fy = min[1]; fy < max[1]; fy += GPRY){ //Then in Y axis
-
-			//Set new bound for y part of box
-			cbMin[1]=(float)fy;  
-			cbMax[1]=(float)fy+GPRY; 
-
-			//Extract section from fov trimmed cloud and store it to cropped cloud
-			adaptiveRemoval.setMax(cbMax);
-			adaptiveRemoval.setMin(cbMin);
-			PointCloud::Ptr croppedCloud(new PointCloud);
-			adaptiveRemoval.filter(*croppedCloud);
-
-			//If the new cloud has no points in it then we do not need to remove ground plane (no plane exists)
-			if(croppedCloud->size()>0){
-				//Get the minimum and max points in the field (max is not used)
-				Eigen::Vector4f gprMin, gprMax; 
-				pcl::getMinMax3D(*croppedCloud,gprMin,gprMax);
-				//Extract Points that lie above the lowest point + delta
-				PointCloud::Ptr gprSect(new PointCloud);
-				passThroughFilter(croppedCloud, "z", gprMin[2],gprMin[2]+GPRDELTA, gprSect, true);
-
-				*gpr+=*gprSect; //Add filtered cloud to full ground plane removal cloud
-
-			}	
-
-			#ifdef ALLSTAGES
-				//TODO Move to single method (Code dupe l300)
-				visualization_msgs::Marker objectMarker;
-				objectMarker.header.frame_id="velodyne";
-				objectMarker.header.stamp = ros::Time();
-				objectMarker.ns = "GPR";
-				objectMarker.id = f;
-				objectMarker.type = visualization_msgs::Marker::CUBE;
-				
-				if (f%2 ==1){
-					objectMarker.color.b=1;
-				}else{
-					objectMarker.color.r=1;
-				}
-				objectMarker.color.a=0.3;
-                coverttoROSBox(cbMin, cbMax, &objectMarker.pose, &objectMarker.scale);
-				GPRmarkers.markers.push_back(objectMarker);
-                f++;
-			#endif
-			
-        }         
-	}//END OF GPR LOOP
-
-
+    //NOTE GPR MARKERS HAVE BEEN REMOVED
 
     //Begin clustering
     std::vector<pcl::PointIndices> clusterIndices;
@@ -407,7 +390,7 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
         gprRemoved.header.frame_id = "velodyne";
         groundPlaneRemovalPub.publish(gprRemoved);
 
-		GPRmarkerPub.publish(GPRmarkers); //Publish all the markers showing the different boxes for adaptive ground plane removal
+		//GPRmarkerPub.publish(GPRmarkers); //Publish all the markers showing the different boxes for adaptive ground plane removal
 
 		//Publisher marker Array (Bounding Boxes of cone candidates)
 		ROS_INFO("Marker Array Size: %u", (int)markers.markers.size());
@@ -438,7 +421,7 @@ int main(int argc, char **argv){
 	#ifdef ALLSTAGES
 		fovTrimPub = n.advertise<PointCloud>("fov_trimmed_cloud",1);                    //Create Publisher for trimmed cloud
 		groundPlaneRemovalPub = n.advertise<PointCloud>("gpr_cloud",1);                 //Create Publisher for GPR cloud
-		GPRmarkerPub = n.advertise<visualization_msgs::MarkerArray>("gpr_markers",1); 	//Create Publisher for Marker array for ground plane removal areas
+		//GPRmarkerPub = n.advertise<visualization_msgs::MarkerArray>("gpr_markers",1); 	//Create Publisher for Marker array for ground plane removal areas
 		markerPub = n.advertise<visualization_msgs::MarkerArray>("cone_markers",1);     //Create Publisher for Marker array for cone areas	
 	#endif
 
