@@ -64,6 +64,7 @@ typedef pcl::PointXYZ Point;
 	ros::Publisher markerPub;
 #endif
 ros::Publisher restoredPub;
+ros::Publisher conesPub;
 
 //Filter Method
 void passThroughFilter(PointCloud::ConstPtr input, std::string filterField, float lowerLimit, float upperLimit, PointCloud::Ptr output, bool negative){
@@ -101,6 +102,12 @@ void ConvertFromPCL(PointCloud::Ptr input, sensor_msgs::PointCloud2* output){
 //Find centre of min and max
 Eigen::Vector4f centrePoint(Eigen::Vector4f min, Eigen::Vector4f max ){
     return (max + min)/2;
+}
+
+Eigen::Vector4f centrePoint(PointCloud::ConstPtr input){
+    Eigen::Vector4f min, max; //Vectors to hold max and min points
+    pcl::getMinMax3D(*input,min,max); //Get max and min points
+    return centrePoint(min,max);
 }
 
 //Get the Size of a box based on min and max
@@ -372,10 +379,33 @@ void PCLcallback(const sensor_msgs::PointCloud2ConstPtr& input){
 
     for (std::vector<PointCloud::Ptr>::const_iterator it = restoredCones.begin(); it !=restoredCones.end(); ++it){
 
+        //Begin cone validity check
         float prob = coneCheck(*it, VERTICALRES, HORIZONTALRES);
         ROS_INFO("PROBABILITY OF CONE %f", prob);
+        //End validity check
 
-        if(prob>ALLOWEDSIZE){
+
+        if(prob>ALLOWEDSIZE){ //If cone probability is greate than threshold value output as cone 
+            perception_pkg::Cone cone;
+            //Header
+            cone.header.stamp = ros::Time::now();
+            cone.header.frame_id = "velodyne";
+            //Child frame id
+            cone.child_frame_id = "velodyne";
+
+            //Colour
+            Eigen::Vector4f centre = centrePoint(*it);
+            if(centre.y()>0){
+                cone.colour = "blue";
+            }else{
+                cone.colour = "yellow";
+            }
+            //location
+            cone.location.x = centre.x();
+            cone.location.y = centre.y();  
+            cone.location.z = centre.z();
+
+            conesPub.publish(cone);
 
         }
 
@@ -457,7 +487,7 @@ int main(int argc, char **argv){
 	#endif
 
 	restoredPub = n.advertise<PointCloud>("restored_cones",10); 						//Create Publisher for restored cones cloud
-    
+    conesPub =n.advertise<perception_pkg::Cone>("cones",1);
 	ros::spin();
 
     return(0);
