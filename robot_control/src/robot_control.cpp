@@ -373,14 +373,16 @@ public:
 
         current_time = ros::Time::now();
 
-        _vx_ = v_mps * cos(_th_);
-        _vy_ = v_mps * sin(_th_);
-        _vth_ = (tan(fBetaRads) * v_mps) / wheelbase_;
+        _vth_ = (tan(fBetaRads) * v_mps) / wheelbase_; // EDIT: Start calculation of angle first, BEFORE touching x and y. Add change in angle to x and y calculation.
 
         double dt = current_time.toSec() - last_time.toSec();
+        double delta_th = _vth_ * dt;
+
+        _vx_ = v_mps * cos(_th_ + delta_th);
+        _vy_ = v_mps * sin(_th_ + delta_th);
+
         double delta_x = _vx_ * dt;
         double delta_y = _vy_ * dt;
-        double delta_th = _vth_ * dt;
 
         _x_ += delta_x;
         _y_ += delta_y;
