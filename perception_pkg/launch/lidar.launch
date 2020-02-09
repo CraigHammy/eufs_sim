@@ -1,0 +1,38 @@
+<launch>
+
+    <!-- Topics used in implementation -->
+    <arg name="lidar_topic"              default="/velodyne"/>
+    <arg name="cone_topic"              default="/cones"/>
+
+    <node pkg="perception_pkg" type="lidar_perception" name="PCL_Listener" output="screen"/>
+        <!--Parameters for FOV Trimming-->
+        <param name="fov_trimming_lower_limit" type="double"   value="0.0"/>
+        <param name="fov_trimming_upper_limit" type="double"   value="5.0"/>
+
+        <!--Parameters for Ground Plane Removal-->
+        <param name="ground_plane_removal_x_step" type="double"   value="3.0"/>
+        <param name="ground_plane_removal_y_step" type="double"   value="1.0"/>
+        <param name="ground_plane_removal_delta" type="double"   value="0.15"/>
+
+        <!--Parameters for Clustering-->
+        <param name="euc_cluster_tolerance" type="double"   value="0.3"/>
+        <param name="euc_cluster_minimum_size" type="int"   value="1"/>
+        <param name="euc_cluster_maximum_size" type="int"   value="20"/>
+
+        <!--Parameters for Cone Restoration Box scaling-->
+        <param name="cone_restore_box_size_scaler" type="int"   value="3"/>
+        <param name="cone_restore_box_height_scaler" type="int"   value="1"/>
+        <param name="cone_restore_box_minimum_size" type="double"   value="0.08"/>
+
+        <!--Parameters for lidar -->
+        <param name="lidar_vertical_resolution" type="double"   value="0.0349066"/>
+        <param name="lidar_horizontal_resolution" type="double"   value="0.00349066"/>
+
+        <!--Parameters for Cone Validity Check-->
+        <param name="minimum_cloud_percentage" type="double"   value="0.5"/>
+
+        <!-- Common parameters -->
+        <param name="lidar"             type="str"      value="$(arg lidar_topic)"/>
+        <param name="cone"              type="str"      value="$(arg cone_topic)"/>
+
+</launch>
