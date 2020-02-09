@@ -30,34 +30,45 @@ typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 typedef pcl::PointXYZ Point;
 
 //FOV Trimming Parameters
-#define LOWERBOUNDS 0
-#define UPPERBOUNDS 5
+// #define LOWERBOUNDS 0
+// #define UPPERBOUNDS 5
+double LOWERBOUNDS,UPPERBOUNDS;
 
 //Ground Plane Removal Parameters
-#define GPRX 3.0
-#define GPRY 1.0
-#define GPRDELTA 0.15
+// #define GPRX 3.0
+// #define GPRY 1.0
+// #define GPRDELTA 0.15
+double GPRX,GPRY,GPRDELTA;
 
 //Clustering Parameters
-#define CLUSTERTOLERANCE 0.3
-#define MINCLUSTERSIZE 1
-#define MAXCLUSTERSIZE 20
+// #define CLUSTERTOLERANCE 0.3
+// #define MINCLUSTERSIZE 1
+// #define MAXCLUSTERSIZE 20
+double CLUSTERTOLERANCE;
+int MINCLUSTERSIZE,MAXCLUSTERSIZE;
 
 //Bounding Box Parameters
-#define BOUNDINGBOXSIZESCALER 3
-#define BOUNDINGBOXHEIGHTSCALER 1
-#define MINIMUMBOXSIZE 0.08
+// #define BOUNDINGBOXSIZESCALER 3
+// #define BOUNDINGBOXHEIGHTSCALER 1
+// #define MINIMUMBOXSIZE 0.08
+int BOUNDINGBOXSIZESCALER, BOUNDINGBOXHEIGHTSCALER;
+double MINIMUMBOXSIZE;
 
 //Sensor Parameters
-#define VERTICALRES 0.0349066 //2 //Degrees 
-#define HORIZONTALRES 0.00349066//0.2 //Degrees
+// #define VERTICALRES 0.0349066 //2 //Degrees 
+// #define HORIZONTALRES 0.00349066//0.2 //Degrees
+double VERTICALRES, HORIZONTALRES;
 
 //Cone probablity Parametes
-#define ALLOWEDSIZE 0.5
+//#define ALLOWEDSIZE 0.5
+double ALLOWEDSIZE;
+
+//Topic Name Parameters
+std::string LIDARTOPIC, CONETOPIC;
 
 //Debug Parameters
 #define ALLSTAGES
-//Global Publisher creation
+
 #ifdef ALLSTAGES
 	ros::Publisher fovTrimPub;
 	ros::Publisher groundPlaneRemovalPub;
@@ -476,8 +487,35 @@ int main(int argc, char **argv){
 
     ros::NodeHandle n; //Create Node
 
+    //FOV Trimming Parameters
+    n.param("fov_trimming_lower_limit", LOWERBOUNDS);
+    n.param("fov_trimming_upper_limit", UPPERBOUNDS);
+    ROS_INFO("upper %lf", UPPERBOUNDS);
+    //This is zero ^
+    //Ground Plane Removal Parameters
+    n.param("ground_plane_removal_x_step", GPRX);
+    n.param("ground_plane_removal_y_step", GPRY);
+    n.param("ground_plane_removal_delta", GPRDELTA);
+
+    //Clustering Parameters
+    n.param("euc_cluster_tolerance", CLUSTERTOLERANCE);
+    n.param("euc_cluster_minimum_size", MINCLUSTERSIZE);
+    n.param("euc_cluster_maximum_size", MAXCLUSTERSIZE);
+
+    //Cone Restoration Parameters
+    n.param("cone_restore_box_size_scaler", BOUNDINGBOXSIZESCALER);
+    n.param("cone_restore_box_height_scaler", BOUNDINGBOXHEIGHTSCALER);
+    n.param("cone_restore_box_minimum_size", MINIMUMBOXSIZE);
+
+    //Lidar Parameters
+    n.param("lidar_vertical_resolution", VERTICALRES);
+    n.param("lidar_horizontal_resolution", HORIZONTALRES);
+
+    n.param("minimum_cloud_percentage", ALLOWEDSIZE);
+
     //Subscribers
     ros::Subscriber sub = n.subscribe("velodyne_points", 1, PCLcallback); //Create Subscriber to velodyne
+
 
     //Publishers
 	#ifdef ALLSTAGES
@@ -488,7 +526,7 @@ int main(int argc, char **argv){
 
 	restoredPub = n.advertise<PointCloud>("restored_cones",10); 						//Create Publisher for restored cones cloud
     conesPub =n.advertise<perception_pkg::Cone>("cones",1);
-	ros::spin();
+    ros::spin();
 
     return(0);
 }

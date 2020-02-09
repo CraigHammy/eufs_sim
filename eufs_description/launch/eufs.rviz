@@ -162,19 +162,98 @@ Visualization Manager:
       Value: true
       Visual Enabled: true
     - Class: rviz/TF
-      Enabled: false
+      Enabled: true
       Frame Timeout: 15
       Frames:
         All Enabled: true
+        base_footprint:
+          Value: true
+        base_link:
+          Value: true
+        gps_base_link:
+          Value: true
+        imu_base_link:
+          Value: true
+        left_front_axle_carrier:
+          Value: true
+        left_front_wheel:
+          Value: true
+        left_rear_axle_carrier:
+          Value: true
+        left_rear_wheel:
+          Value: true
+        left_steering_link:
+          Value: true
+        odom:
+          Value: true
+        odom_ground_truth:
+          Value: true
+        right_front_axle_carrier:
+          Value: true
+        right_front_wheel:
+          Value: true
+        right_rear_axle_carrier:
+          Value: true
+        right_rear_wheel:
+          Value: true
+        right_steering_link:
+          Value: true
+        velodyne:
+          Value: true
+        velodyne_base_link:
+          Value: true
+        zed_center:
+          Value: true
+        zed_frame:
+          Value: true
+        zed_left_camera:
+          Value: true
+        zed_left_camera_optical_frame:
+          Value: true
+        zed_right_camera:
+          Value: true
       Marker Scale: 1
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: false
       Tree:
-        {}
+        odom:
+          base_footprint:
+            base_link:
+              gps_base_link:
+                {}
+              imu_base_link:
+                {}
+              left_rear_axle_carrier:
+                left_rear_wheel:
+                  {}
+              left_steering_link:
+                left_front_axle_carrier:
+                  left_front_wheel:
+                    {}
+              odom_ground_truth:
+                {}
+              right_rear_axle_carrier:
+                right_rear_wheel:
+                  {}
+              right_steering_link:
+                right_front_axle_carrier:
+                  right_front_wheel:
+                    {}
+              velodyne_base_link:
+                velodyne:
+                  {}
+              zed_center:
+                zed_left_camera:
+                  zed_left_camera_optical_frame:
+                    {}
+                zed_right_camera:
+                  {}
+              zed_frame:
+                {}
       Update Interval: 0
-      Value: false
+      Value: true
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -187,7 +266,7 @@ Visualization Manager:
       Color: 255; 0; 0
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: false
+      Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4
@@ -204,7 +283,7 @@ Visualization Manager:
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
-      Value: false
+      Value: true
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -217,7 +296,7 @@ Visualization Manager:
       Color: 255; 255; 127
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: false
+      Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -234,7 +313,7 @@ Visualization Manager:
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
-      Value: false
+      Value: true
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -247,7 +326,7 @@ Visualization Manager:
       Color: 0; 255; 127
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -264,7 +343,7 @@ Visualization Manager:
       Unreliable: true
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -277,7 +356,7 @@ Visualization Manager:
       Color: 0; 0; 255
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 0.0926680788
@@ -294,15 +373,15 @@ Visualization Manager:
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /cone_markers
       Name: MarkerArray (Green Box)
       Namespaces:
-        cluster: true
+        {}
       Queue Size: 100
-      Value: true
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -343,10 +422,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.00999999978
-      Pitch: 0.809796929
+      Pitch: 0.7597965
       Target Frame: <Fixed Frame>
       Value: ThirdPersonFollower (rviz)
-      Yaw: 2.77539253
+      Yaw: 3.03039145
     Saved: ~
 Window Geometry:
   Displays:
