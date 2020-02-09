@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(perception_pkg)
+project(navigation_pkg)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -8,13 +8,11 @@ project(perception_pkg)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  message_generation
-  std_msgs
   geometry_msgs
-  pcl_conversions
-  pcl_ros
-  sensor_msgs
+  actionlib
+  roscpp
+  std_msgs
+  tf
 )
 
 ## System dependencies are found with CMake's conventions
@@ -51,12 +49,11 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-add_message_files(
-  FILES
-  Cone.msg
+# add_message_files(
+#   FILES
 #   Message1.msg
 #   Message2.msg
-)
+# )
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -73,12 +70,10 @@ add_message_files(
 # )
 
 ## Generate added messages and services with any dependencies listed here
-generate_messages(
-  DEPENDENCIES
-  geometry_msgs
-  std_msgs
-#   std_msgs  # Or other packages containing msgs
-)
+# generate_messages(
+#   DEPENDENCIES
+#   geometry_msgs#   std_msgs
+# )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -110,9 +105,9 @@ generate_messages(
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#INCLUDE_DIRS include
-#  LIBRARIES fs_cone_detection
-  CATKIN_DEPENDS roscpp message_runtime pcl_conversions pcl_ros sensor_msgs
+#  INCLUDE_DIRS include
+#  LIBRARIES navigation_pkg
+#  CATKIN_DEPENDS geometry_msgs roscpp std_msgs tf
 #  DEPENDS system_lib
 )
 
@@ -129,7 +124,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/fs_cone_detection.cpp
+#   src/${PROJECT_NAME}/navigation_pkg.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -140,8 +135,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/fs_cone_detection_node.cpp)
-add_executable(lidar_perception src/lidar_perception.cpp)
+# add_executable(${PROJECT_NAME}_node src/navigation_pkg_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -152,15 +146,11 @@ add_executable(lidar_perception src/lidar_perception.cpp)
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(lidar_perception ${lidar_perception_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
-target_link_libraries(lidar_perception 
-  ${catkin_LIBRARIES}
-)
 
 #############
 ## Install ##
@@ -176,11 +166,18 @@ target_link_libraries(lidar_perception
 #   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 # )
 
-## Mark executables and/or libraries for installation
-# install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_node
+## Mark executables for installation
+## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
+# install(TARGETS ${PROJECT_NAME}_node
+#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+# )
+
+## Mark libraries for installation
+## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
+# install(TARGETS ${PROJECT_NAME}
 #   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+#   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
 # )
 
 ## Mark cpp header files for installation
@@ -202,7 +199,7 @@ target_link_libraries(lidar_perception
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_fs_cone_detection.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_navigation_pkg.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
@@ -210,6 +207,10 @@ target_link_libraries(lidar_perception
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
 
-#Added from tut
+add_executable(mapping_lap src/mapping_lap.cpp)
 
+add_dependencies(mapping_lap ${mapping_lap_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+target_link_libraries(mapping_lap 
+  ${catkin_LIBRARIES}
+)
