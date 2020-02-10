@@ -142,6 +142,8 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/fs_cone_detection_node.cpp)
 add_executable(lidar_perception src/lidar_perception.cpp)
+add_executable(lidar_processing src/lidar_processing.cpp)
+
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -153,12 +155,16 @@ add_executable(lidar_perception src/lidar_perception.cpp)
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(lidar_perception ${lidar_perception_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(lidar_processing ${lidar_processing_EXPORTED_TARGETS} %{catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
 target_link_libraries(lidar_perception 
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(lidar_processing 
   ${catkin_LIBRARIES}
 )
 
@@ -209,7 +215,5 @@ target_link_libraries(lidar_perception
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
-
-#Added from tut
 
 
