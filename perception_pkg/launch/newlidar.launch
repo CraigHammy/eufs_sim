@@ -31,8 +31,11 @@
         <!--Parameters for Cone Validity Check-->
         <param name="minimum_cloud_percentage" type="double"   value="0.5"/>
 
+        <param name="processing_pipeline_stages" type="int" value ="0"/>
+
         <!-- Common parameters -->
         <param name="lidar"             type="str"      value="$(arg lidar_topic)"/>
         <param name="cone"              type="str"      value="$(arg cone_topic)"/>
+        <param name="use_sim_time" value="true"/>
     </node>
 </launch>

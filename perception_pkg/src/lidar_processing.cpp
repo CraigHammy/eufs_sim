@@ -7,43 +7,33 @@ void LidarProcessing::initialise(){
 
     if(!initialised_){
 
-        //lidarTopic = "/velodyne";
-        // nh_.param("lidar",lidarTopic);
-        lidarTopic = "/velodyne_points";
+        nh_.param("lidar",lidarTopic); //Attempt to read lidar topic parameter
+        //If unable to read in params from launch file then default to inbuilt ones
+        if(lidarTopic ==""){
+            ROS_ERROR("PARAMETERS FAIL TO READ, DEFAULTING TO INBUILT");
+            //call some function
+            defaultParams();
+        }else{
+            defaultLaunchParams();
+        }
+
+        //Setup Subscriber
         lidar_sub_ = nh_.subscribe<sensor_msgs::PointCloud2>(lidarTopic, 1, boost::bind(&LidarProcessing::lidarCallback, this, _1));
         waitForSubscribers();
 
-        //nh_.param("cone",coneTopic); 
-        coneTopic = "/cones";
+        //Setup Publishers
         cone_pub_ = nh_.advertise<perception_pkg::Cone>(coneTopic, 1);
         waitForPublishers();
+
+        psuedo_scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("/laserscan",50);
+
+        //Processing Pipeline Stages, used for debug
+        if(processingSteps){
+            fov_trim_pub_ = nh_.advertise<PointCloud>("lidar_debug/fov_trimmed_cloud",1);
+		    ground_plane_removal_pub_ = nh_.advertise<PointCloud>("lidar_debug/gpr_cloud",1);
+            restored_pub_ = nh_.advertise<PointCloud>("lidar_debug/restored_cones",1);
+        }
         
-/*         //FOV Trimming Parameters
-        nh_.param("fov_trimming_lower_limit", fovLowerLimit);
-        nh_.param("fov_trimming_upper_limit", fovUpperLimit);
-
-        //Ground Plane Removal Parameters
-        nh_.param("ground_plane_removal_x_step", gprXStep);
-        nh_.param("ground_plane_removal_y_step", gprYStep);
-        nh_.param("ground_plane_removal_delta", gprDelta);
-
-        //Clustering Parameters
-        nh_.param("euc_cluster_tolerance", eucMaximumDistance);
-        nh_.param("euc_cluster_minimum_size", eucMinimumClusterSize);
-        nh_.param("euc_cluster_maximum_size", eucMaximumClusterSize);
-
-        //Cone Restoration Parameters
-        nh_.param("cone_restore_box_size_scaler", boundingBoxSizeScaler);
-        nh_.param("cone_restore_box_height_scaler", boundingBoxHeightScaler);
-        nh_.param("cone_restore_box_minimum_size", minimumBoxSize);
-
-        //Lidar Parameters
-        nh_.param("lidar_vertical_resolution", lidarVerticalRes);
-        nh_.param("lidar_horizontal_resolution", lidarHorizontalRes);
-
-        //Cone Validity Check
-        nh_.param("minimum_cloud_percentage", minimumCloudPercentage); */
-
         initialised_=true;
     } else{
         ROS_WARN("LidarProcessing object has already been initialised, skipping call");
@@ -55,9 +45,10 @@ void LidarProcessing::initialise(){
  * @param rosCloud PointCloud2 in ROS format
  * @param pclCloud PCL PointCloud for output
  */
-void LidarProcessing::convertToPCL(sensor_msgs::PointCloud2 rosCloud, PointCloud::Ptr pclCloud){
+void LidarProcessing::convertToPCL(sensor_msgs::PointCloud2ConstPtr rosCloud, PointCloud::Ptr pclCloud){
+    
     pcl::PCLPointCloud2 pclPC2;
-    pcl_conversions::toPCL(rosCloud, pclPC2);    //Converts from ROS Point Cloud 2 to PCL Point Cloud 2
+    pcl_conversions::toPCL(*rosCloud, pclPC2);    //Converts from ROS Point Cloud 2 to PCL Point Cloud 2
     pcl::fromPCLPointCloud2(pclPC2,*pclCloud);   //Converts from PCL Point Cloud 2 to PCL Point Cloud
 }
 
@@ -66,7 +57,7 @@ void LidarProcessing::convertToPCL(sensor_msgs::PointCloud2 rosCloud, PointCloud
  * @param pclCloud PointCloud in PCL Format
  * @param rosCloud ROS PointCloud2 for output
  */
-void LidarProcessing::convertToROS(PointCloud::Ptr pclCloud, sensor_msgs::PointCloud2Ptr rosCloud){
+void LidarProcessing::convertToROS(PointCloud::Ptr pclCloud, sensor_msgs::PointCloud2* rosCloud){
     pcl::PCLPointCloud2 pclPC2;
     pcl::toPCLPointCloud2(*pclCloud,pclPC2);      //Convert from PCL Point Cloud to PCL Point Cloud 2
     pcl_conversions::fromPCL(pclPC2,*rosCloud);  //Convert from PCL Point Cloud 2 to ROS Point Cloud 2
@@ -165,8 +156,11 @@ void LidarProcessing::passFilter(PointCloud::ConstPtr pclInputCloud, PointCloud:
     passThroughFilter.setInputCloud(pclInputCloud);
     passThroughFilter.setFilterFieldName(filterField);
     passThroughFilter.setFilterLimits(lowerLimit,upperLimit);
+
     if(negate){
         passThroughFilter.setFilterLimitsNegative(true);
+    }else{
+        passThroughFilter.setFilterLimitsNegative(false);
     }
 
     passThroughFilter.filter(*pclOutputCloud);   //Filter cloud based on above parameters
@@ -335,30 +329,138 @@ double LidarProcessing::coneValiditycheck(PointCloud::ConstPtr pclInputCloud, do
     return roundf(pclInputCloud->size()/eD);
 }
 
+/**
+ * @brief determine colour of cone 
+ * @param pclInputCloud cone cloud that is to be checked for colour
+ */
+std::string LidarProcessing::coneColourcheck(PointCloud::ConstPtr pclInputCloud){
+    Eigen::Vector4f centre = centrePoint(pclInputCloud);
+    if(centre.y()>0){
+        return "blue";
+    }else{
+        return "yellow";
+    }
+}
+
+/**
+ * @brief create message for containing cone information
+ * @param pclInputCloud cone cloud that represents cone
+ * @param coneColour colour of cone
+ */
+perception_pkg::Cone LidarProcessing::createConeMessage(PointCloud::ConstPtr pclInputCloud, std::string coneColour){
+    perception_pkg::Cone cone;
+    //Header
+    cone.header.stamp = ros::Time::now();
+    cone.header.frame_id = "Cone";
+    //Child Frame ID
+    cone.child_frame_id = "velodyne";
+
+    //Colour
+    cone.colour = coneColour;
+
+    Eigen::Vector4f centre = centrePoint(pclInputCloud);
+
+    cone.location.x = centre.x();
+    cone.location.y = centre.y();
+    cone.location.z = 0;
+    return cone;
+}
+
+/**
+ * @brief take an input cloud and find all the cones within it
+ */
 void LidarProcessing::findCones(){
-    ROS_INFO("Attempting to Find Cones");
-    ros::Time begin = ros::Time::now();
+    /*     
+        ROS_INFO("Attempting to Find Cones");
+        ros::Time begin = ros::Time::now();
 
-    PointCloud::Ptr rawCloud(new PointCloud);
-    convertToPCL(global_cloud_, rawCloud);
+        // PointCloud::Ptr rawCloud(new PointCloud);
+        // convertToPCL(global_cloud_, rawCloud);
 
-    PointCloud::Ptr fovTrimCloud(new PointCloud);
-    passFilter(rawCloud, fovTrimCloud, "x", fovLowerLimit, fovUpperLimit, false);
+        PointCloud::Ptr fovTrimCloud(new PointCloud);
+        passFilter(global_cloud_, fovTrimCloud, "x", fovLowerLimit, fovUpperLimit, false);
 
-    PointCloud::Ptr groundPlaneRemovalCloud(new PointCloud);
-    adaptiveGroundPlaneRemoval(fovTrimCloud, groundPlaneRemovalCloud, gprXStep, gprYStep, gprDelta);
+        PointCloud::Ptr groundPlaneRemovalCloud(new PointCloud);
+        adaptiveGroundPlaneRemoval(fovTrimCloud, groundPlaneRemovalCloud, gprXStep, gprYStep, gprDelta);
 
-    std::vector<pcl::PointIndices> clusterIndices;
-    eucCluster(groundPlaneRemovalCloud, clusterIndices, eucMaximumDistance, eucMinimumClusterSize, eucMaximumClusterSize);
+        std::vector<pcl::PointIndices> clusterIndices;
+        eucCluster(groundPlaneRemovalCloud, clusterIndices, eucMaximumDistance, eucMinimumClusterSize, eucMaximumClusterSize);
 
-    std::vector<PointCloud::Ptr> cones = extractCandidates(groundPlaneRemovalCloud, clusterIndices);
-    ROS_INFO("Cone Candidates %d", cones.size());
+        std::vector<PointCloud::Ptr> cones = extractCandidates(groundPlaneRemovalCloud, clusterIndices);
+        ROS_INFO("Cone Candidates %d", cones.size());
 
-    std::vector<PointCloud::Ptr> restoredCones = restoreCandidates(rawCloud, cones);
-    ROS_INFO("Cones Restored %d" ,restoredCones.size());
+        std::vector<PointCloud::Ptr> restoredCones = restoreCandidates(global_cloud_, cones);
+        ROS_INFO("Cones Restored %d" ,restoredCones.size()); 
+    */
 
 
 }
+
+/**
+ * @brief Fallback method for if param read in fails
+ */
+void LidarProcessing::defaultParams(){
+    lidarTopic = "/velodyne_points";
+    coneTopic = "/cones";
+
+    fovLowerLimit = 0.0;
+    fovUpperLimit = 5.0;
+
+    gprXStep = 3.0;
+    gprYStep = 1.0;
+    gprDelta = 0.15;
+
+    eucMaximumDistance = 0.3;
+    eucMinimumClusterSize = 1;
+    eucMaximumClusterSize = 20;
+
+    boundingBoxSizeScaler = 3;
+    boundingBoxHeightScaler = 1;
+    minimumBoxSize = 0.08;
+
+    lidarVerticalRes = 0.0349066;
+    lidarHorizontalRes = 0.00349066;
+
+    minimumCloudPercentage = 0.5;
+
+    processingSteps = 1;
+
+}
+
+/**
+ * @brief Read Remaining Paramaters from Launch file
+ */
+void LidarProcessing::defaultLaunchParams(){
+
+    nh_.param("cone",coneTopic); 
+    //FOV Trimming Parameters
+    nh_.param("fov_trimming_lower_limit", fovLowerLimit);
+    nh_.param("fov_trimming_upper_limit", fovUpperLimit);
+
+    //Ground Plane Removal Parameters
+    nh_.param("ground_plane_removal_x_step", gprXStep);
+    nh_.param("ground_plane_removal_y_step", gprYStep);
+    nh_.param("ground_plane_removal_delta", gprDelta);
+
+    //Clustering Parameters
+    nh_.param("euc_cluster_tolerance", eucMaximumDistance);
+    nh_.param("euc_cluster_minimum_size", eucMinimumClusterSize);
+    nh_.param("euc_cluster_maximum_size", eucMaximumClusterSize);
+
+    //Cone Restoration Parameters
+    nh_.param("cone_restore_box_size_scaler", boundingBoxSizeScaler);
+    nh_.param("cone_restore_box_height_scaler", boundingBoxHeightScaler);
+    nh_.param("cone_restore_box_minimum_size", minimumBoxSize);
+
+    //Lidar Parameters
+    nh_.param("lidar_vertical_resolution", lidarVerticalRes);
+    nh_.param("lidar_horizontal_resolution", lidarHorizontalRes);
+
+    //Cone Validity Check
+    nh_.param("minimum_cloud_percentage", minimumCloudPercentage); 
+    nh_.param("processing_pipeline_stages", processingSteps);
+}
+
 /**
  * @brief Waits for publiser to be ready to publish messages
  */
@@ -369,6 +471,8 @@ void LidarProcessing::waitForPublishers(){
             cone_publisher_ready_ = true;
             ROS_WARN("Publisher is now ready");
             break;
+        }else{
+            ROS_WARN("No Subscribers to Cones");
         }
     }
 }
@@ -385,22 +489,137 @@ void LidarProcessing::waitForSubscribers(){
     }
 }
 
+void LidarProcessing::outputDebugClouds(PointCloud::Ptr trimmedCloud, PointCloud::Ptr gprCloud, std::vector<PointCloud::Ptr> restoredCones){
+    sensor_msgs::PointCloud2 fovTrimmed, gpr, restored;
+    convertToROS(trimmedCloud,&fovTrimmed);
+    fovTrimmed.header.frame_id = "velodyne";
+    fov_trim_pub_.publish(fovTrimmed);
+
+    convertToROS(gprCloud,&gpr);
+    gpr.header.frame_id = "velodyne";
+    ground_plane_removal_pub_.publish(gpr);
+
+    PointCloud::Ptr restoredConeCloud(new PointCloud);
+    for(int i =0; i<restoredCones.size(); i++){
+        *restoredConeCloud += *restoredCones[i];
+    }
+
+    convertToROS(restoredConeCloud,&restored);
+    restored.header.frame_id = "velodyne";
+    restored_pub_.publish(restored);
+}
+
+double LidarProcessing::getConeAngle(Eigen::Vector4f coneCentrePoint){
+
+    double rads = atan2(coneCentrePoint.y(),coneCentrePoint.x());
+    return rads;
+
+}
+
+sensor_msgs::LaserScan LidarProcessing::createDummyScan(std::vector<double> coneAngles, std::vector<Eigen::Vector4f> centres){
+    sensor_msgs::LaserScan scan;
+    int num_readings = 720;
+    int laser_frequency = 40;
+    scan.header.stamp = ros::Time::now();
+    scan.header.frame_id = "velodyne";
+
+    scan.angle_min = -1.570796;
+    scan.angle_max = 1.570796;
+    scan.angle_increment = 3.14/num_readings;
+
+    scan.time_increment = (1/laser_frequency)/num_readings;
+    scan.range_min = 0.1;
+    scan.range_max = 10.0;
+    scan.scan_time = 1/laser_frequency;
+
+    double ranges[num_readings];
+    double intensities[num_readings];
+    int inflationSize = 5;
+    std::vector<float> distance;
+    distance.resize(coneAngles.size());
+
+    for(int i = 0; i<coneAngles.size(); i++){
+        int index = (coneAngles[i]-scan.angle_min)/scan.angle_increment;
+        coneAngles[i] = index;
+        float x = centres[i].x();
+        float y = centres[i].y();
+        distance[i] = sqrtf(pow(x,2) + pow(y,2));
+    }
+    std::vector<Eigen::Vector2f> angleDistancePairs;
+    for(int i =0; i<coneAngles.size(); i++){
+        for(int j = - inflationSize; j<inflationSize; j++){
+            Eigen::Vector2f pair;
+            pair.x()= coneAngles[i]+j;
+            pair.y()= distance[i];
+            angleDistancePairs.push_back(pair);
+        }
+    }
+
+    for(int i = 0; i<num_readings; i++){
+        ranges[i]= std::numeric_limits<float>::infinity();
+        intensities[i]= 0;
+    }
+
+    for(int i = 0; i<angleDistancePairs.size(); i++){
+        int range = angleDistancePairs[i].x();
+        ranges[range] = angleDistancePairs[i].y();
+
+    }
+
+    scan.ranges.resize(num_readings);
+    scan.intensities.resize(num_readings);
+    for(int i =0; i< num_readings; i++){
+        scan.ranges[i] = ranges[i];
+        scan.intensities[i] = intensities[i];
+    }
+    return scan;
+}
 /**
  * @brief Callback for recieving lidar data
  * @param msg a lidar message
  */
 void LidarProcessing::lidarCallback(const sensor_msgs::PointCloud2ConstPtr& msg){
-    ROS_INFO("LIDAR CALLBACK TRIGGERED");
-    global_cloud_.header = msg->header;
-    global_cloud_.height = msg->height;
-    global_cloud_.width = msg->width;
-    global_cloud_.fields = msg->fields;
-    global_cloud_.is_bigendian = msg->is_bigendian;
-    global_cloud_.point_step = msg->point_step;
-    global_cloud_.row_step = msg->row_step;
-    global_cloud_.data = msg->data;
-    global_cloud_.is_dense = msg->is_dense;
 
+    ROS_INFO("Attempting to Find Cones");
+    ros::Time begin = ros::Time::now();
+
+    PointCloud::Ptr rawCloud(new PointCloud);
+    convertToPCL(msg, rawCloud);
+
+    PointCloud::Ptr fovTrimCloud(new PointCloud);
+    passFilter(rawCloud, fovTrimCloud, "x", fovLowerLimit, fovUpperLimit, false);
+
+    PointCloud::Ptr groundPlaneRemovalCloud(new PointCloud);
+    adaptiveGroundPlaneRemoval(fovTrimCloud, groundPlaneRemovalCloud, gprXStep, gprYStep, gprDelta);
+
+    std::vector<pcl::PointIndices> clusterIndices;
+    eucCluster(groundPlaneRemovalCloud, clusterIndices, eucMaximumDistance, eucMinimumClusterSize, eucMaximumClusterSize);
+
+    std::vector<PointCloud::Ptr> cones = extractCandidates(groundPlaneRemovalCloud, clusterIndices);
+    ROS_INFO("Cone Candidates %d", (int)cones.size());
+
+    std::vector<PointCloud::Ptr> restoredCones = restoreCandidates(rawCloud, cones);
+    ROS_INFO("Cones Restored %d" , (int)restoredCones.size());
+    
+    if(processingSteps){
+        outputDebugClouds(fovTrimCloud,groundPlaneRemovalCloud,restoredCones);
+    }
+    std::vector<double> coneAngles;
+    std::vector<Eigen::Vector4f> centres;
+    for(int i =0; i<restoredCones.size(); i++){
+        double validity = coneValiditycheck(restoredCones[i],lidarVerticalRes,lidarHorizontalRes);
+        ROS_INFO("Cone %d Validity = %d",i, (int)validity);
+
+        if(validity>=minimumCloudPercentage){
+            cone_pub_.publish(createConeMessage(restoredCones[i],coneColourcheck(restoredCones[i])));
+            double angle = getConeAngle(centrePoint(restoredCones[i]));
+
+            //ROS_INFO("Angle of cone %d is %f", i, angle);
+            coneAngles.push_back(angle);
+            centres.push_back(centrePoint(restoredCones[i]));
+        }
+    }
+    psuedo_scan_pub_.publish(createDummyScan(coneAngles, centres));
 }
 
 
@@ -408,10 +627,8 @@ int main(int argc, char** argv){
     ros::init(argc,argv, "Lidar_Processing_Node");
     ros::NodeHandle nodeHandle;
     LidarProcessing lp(&nodeHandle);
-
+    
     lp.initialise();
-    //Add do part here
-    lp.findCones();
     ros::spin();
     return 0;
 

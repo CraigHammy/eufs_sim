@@ -9,6 +9,7 @@
 //ROS Inlcudes
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/LaserScan.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <perception_pkg/Cone.h>
@@ -50,14 +51,14 @@ class LidarProcessing{
          * @param rosCloud PointCloud2 in ROS format
          * @param pclCloud PCL PointCloud for output
          */
-        void convertToPCL(sensor_msgs::PointCloud2 rosCloud, PointCloud::Ptr pclCloud);
+        void convertToPCL(sensor_msgs::PointCloud2ConstPtr rosCloud, PointCloud::Ptr pclCloud);
 
         /**
          * @brief Convert from PCL Style PointCloud to ROS PointCloud2 for communication between nodes
          * @param pclCloud PointCloud in PCL Format
          * @param rosCloud ROS PointCloud2 for output
          */
-        void convertToROS(PointCloud::Ptr pclCloud, sensor_msgs::PointCloud2Ptr rosCloud);
+        void convertToROS(PointCloud::Ptr pclCloud, sensor_msgs::PointCloud2* rosCloud);
         
         /**
          * @brief returns centre point of cloud
@@ -160,11 +161,34 @@ class LidarProcessing{
          */
         double coneValiditycheck(PointCloud::ConstPtr pclInputCloud, double  lidarVerticalResolution, double lidarHorizontalResolution);
         /**
+         * @brief determine colour of cone 
+         * @param pclInputCloud cone cloud that is to be checked for colour
+         */
+        std::string coneColourcheck(PointCloud::ConstPtr pclInputCloud);
+        /**
+         * @brief create message for containing cone information
+         * @param pclInputCloud cone cloud that represents cone
+         * @param coneColour colour of cone
+         */
+        perception_pkg::Cone createConeMessage(PointCloud::ConstPtr pclInputCloud, std::string coneColour);
+
+        /**
          * @brief take an input cloud and find all the cones within it
          */
         void findCones();
 
     private:
+
+        /**
+         * @brief Fallback method for if param read in fails
+         */
+        void defaultParams();
+
+        /**
+         * @brief Read Remaining Paramaters from Launch file
+         */
+        void defaultLaunchParams();
+
         /**
          * @brief Waits for publiser to be ready to publish messages
          */
@@ -175,14 +199,17 @@ class LidarProcessing{
         */
         void waitForSubscribers();
 
+        void outputDebugClouds(PointCloud::Ptr trimmedCloud, PointCloud::Ptr gprCloud, std::vector<PointCloud::Ptr>  restoredCones);
+
+        double getConeAngle(Eigen::Vector4f coneCentrePoint);
+
+        sensor_msgs::LaserScan createDummyScan(std::vector<double> coneAngles, std::vector<Eigen::Vector4f> centres);
         /**
          * @brief Callback for recieving lidar data
          * @param msg a lidar message
          */
         void lidarCallback(const sensor_msgs::PointCloud2ConstPtr& msg);
 
-
-        //Some stuff
         //PCL Variables
         pcl::PassThrough<pcl::PointXYZ> passThroughFilter; //For FOV Trimming and Ground Plane Removal
         pcl::CropBox<Point> cropBoxFilter; //For Ground Plane Removal and Cone Restoration
@@ -203,7 +230,13 @@ class LidarProcessing{
         ros::NodeHandle nh_;
         ros::Subscriber lidar_sub_;
         ros::Publisher cone_pub_;
-        sensor_msgs::PointCloud2 global_cloud_;
+
+        int processingSteps;
+        ros::Publisher fov_trim_pub_;	
+        ros::Publisher ground_plane_removal_pub_;
+        ros::Publisher restored_pub_;
+
+        ros::Publisher psuedo_scan_pub_;
 
         bool initialised_;
         bool lidar_subscriber_active_, cone_publisher_ready_;
