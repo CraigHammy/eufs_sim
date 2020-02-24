@@ -5,6 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
+        - /Restored Cones (Blue)1
         - /LaserScan1
       Splitter Ratio: 0.663888872
     Tree Height: 775
@@ -26,7 +27,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: Unfiltered (Red)
+    SyncSource: LaserScan
 Toolbars:
   toolButtonStyle: 2
 Visualization Manager:
@@ -348,21 +349,21 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 10
-        Min Value: -10
+        Max Value: 0.226438478
+        Min Value: 0.00471237302
         Value: true
       Axis: Z
-      Channel Name: z
+      Channel Name: intensity
       Class: rviz/PointCloud2
       Color: 0; 0; 255
       Color Transformer: FlatColor
       Decay Time: 0
       Enabled: true
       Invert Rainbow: false
-      Max Color: 255; 255; 255
-      Max Intensity: 0.0926680788
-      Min Color: 0; 0; 0
-      Min Intensity: -0.165136397
+      Max Color: 0; 0; 0
+      Max Intensity: 999999
+      Min Color: 255; 255; 255
+      Min Intensity: 999999
       Name: Restored Cones (Blue)
       Position Transformer: XYZ
       Queue Size: 1
@@ -378,8 +379,8 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 0.180143237
-        Min Value: 0.180143237
+        Max Value: 0.152634531
+        Min Value: 0.104731619
         Value: true
       Axis: Z
       Channel Name: intensities
@@ -430,7 +431,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/ThirdPersonFollower
-      Distance: 15.1289682
+      Distance: 13.7215405
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
@@ -445,10 +446,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.00999999978
-      Pitch: 1.16979659
+      Pitch: 0.8447963
       Target Frame: <Fixed Frame>
       Value: ThirdPersonFollower (rviz)
-      Yaw: 2.71039891
+      Yaw: 3.06037951
     Saved: ~
 Window Geometry:
   Displays:

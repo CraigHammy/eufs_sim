@@ -239,7 +239,14 @@ void LidarProcessing::adaptiveGroundPlaneRemoval(PointCloud::ConstPtr pclInputCl
 void LidarProcessing::eucCluster(PointCloud::ConstPtr pclInputCloud, std::vector<pcl::PointIndices>& clusters, double maximumSeperation, int minimumClusterSize, int maximumClusterSize){
     //Creare tree for search 
     pcl::search::KdTree<Point>::Ptr tree (new pcl::search::KdTree<Point>);
-    tree->setInputCloud(pclInputCloud);
+
+    if(pclInputCloud->size() == 0){
+        ROS_ERROR("Ma point clouds empty, you sure your on track?");
+
+    }else{
+        tree->setInputCloud(pclInputCloud);
+    }
+    
 
     //Determine all clusters passed on the set parameters
 	
@@ -466,13 +473,18 @@ void LidarProcessing::defaultLaunchParams(){
  */
 void LidarProcessing::waitForPublishers(){
     ros::Rate rate(20);
+    int update = 0;
     while(ros::ok()){
         if(cone_pub_.getNumSubscribers()>0){
             cone_publisher_ready_ = true;
             ROS_WARN("Publisher is now ready");
             break;
         }else{
-            ROS_WARN("No Subscribers to Cones");
+            update++;
+            if(update%1000000 == 0){
+                ROS_WARN("No Subscribers to Cones");
+            }
+            
         }
     }
 }
@@ -489,6 +501,12 @@ void LidarProcessing::waitForSubscribers(){
     }
 }
 
+/**
+ * @brief Outputs the 3 main stages of the lidar pipeline to 3 seperate ros topics
+ * @param trimmedCloud pointcloud from the fov trimming stage 
+ * @param gprCloud pointcloud from ground plane removal stage
+ * @param restoredCones vector of all restored cones
+ */
 void LidarProcessing::outputDebugClouds(PointCloud::Ptr trimmedCloud, PointCloud::Ptr gprCloud, std::vector<PointCloud::Ptr> restoredCones){
     sensor_msgs::PointCloud2 fovTrimmed, gpr, restored;
     convertToROS(trimmedCloud,&fovTrimmed);
@@ -509,69 +527,58 @@ void LidarProcessing::outputDebugClouds(PointCloud::Ptr trimmedCloud, PointCloud
     restored_pub_.publish(restored);
 }
 
-double LidarProcessing::getConeAngle(Eigen::Vector4f coneCentrePoint){
-
-    double rads = atan2(coneCentrePoint.y(),coneCentrePoint.x());
-    return rads;
-
-}
-
-sensor_msgs::LaserScan LidarProcessing::createDummyScan(std::vector<double> coneAngles, std::vector<Eigen::Vector4f> centres){
-    sensor_msgs::LaserScan scan;
-    int num_readings = 720;
-    int laser_frequency = 40;
+/**
+ * @brief creates a fake laser scan message for use in gmapping tests
+ * @param coneClouds cones found during process
+ */
+sensor_msgs::LaserScan LidarProcessing::createDummyScan(std::vector<PointCloud::Ptr> coneClouds){
+    sensor_msgs::LaserScan scan; //Empty Scan Message
+    int num_readings = 720; //Number of fake readings
+    int laser_frequency = 40; //Fake laser frequencys
+    //Values assigened to scan message
     scan.header.stamp = ros::Time::now();
     scan.header.frame_id = "velodyne";
-
     scan.angle_min = -1.570796;
     scan.angle_max = 1.570796;
     scan.angle_increment = 3.14/num_readings;
-
     scan.time_increment = (1/laser_frequency)/num_readings;
     scan.range_min = 0.1;
     scan.range_max = 10.0;
     scan.scan_time = 1/laser_frequency;
-
+    //Arrays for faked range and intensity values
     double ranges[num_readings];
     double intensities[num_readings];
-    int inflationSize = 5;
-    std::vector<float> distance;
-    distance.resize(coneAngles.size());
-
-    for(int i = 0; i<coneAngles.size(); i++){
-        int index = (coneAngles[i]-scan.angle_min)/scan.angle_increment;
-        coneAngles[i] = index;
-        float x = centres[i].x();
-        float y = centres[i].y();
-        distance[i] = sqrtf(pow(x,2) + pow(y,2));
-    }
-    std::vector<Eigen::Vector2f> angleDistancePairs;
-    for(int i =0; i<coneAngles.size(); i++){
-        for(int j = - inflationSize; j<inflationSize; j++){
-            Eigen::Vector2f pair;
-            pair.x()= coneAngles[i]+j;
-            pair.y()= distance[i];
-            angleDistancePairs.push_back(pair);
-        }
-    }
-
-    for(int i = 0; i<num_readings; i++){
-        ranges[i]= std::numeric_limits<float>::infinity();
-        intensities[i]= 0;
-    }
-
-    for(int i = 0; i<angleDistancePairs.size(); i++){
-        int range = angleDistancePairs[i].x();
-        ranges[range] = angleDistancePairs[i].y();
-
-    }
 
     scan.ranges.resize(num_readings);
     scan.intensities.resize(num_readings);
-    for(int i =0; i< num_readings; i++){
-        scan.ranges[i] = ranges[i];
-        scan.intensities[i] = intensities[i];
+
+    int inflationSize = 5; //Number of points added either side of the cone centre point
+
+    for(int i = 0; i<num_readings; i++){
+        scan.ranges[i]= std::numeric_limits<float>::infinity();
+        scan.intensities[i]= 0;  
     }
+
+    for(int i = 0; i<coneClouds.size(); i++){
+        Eigen::Vector4f centre =centrePoint(coneClouds[i]);
+        double angle = atan2(centre.y(),centre.x());
+
+        int index = (angle-scan.angle_min)/scan.angle_increment; //Centre Point of cone in range of laser scan
+        float distance = sqrtf(pow(centre.x(),2) + pow(centre.y(),2)); //Straigh line distance of cone
+
+        for(int j = - inflationSize; j<inflationSize; j++){
+            int pos = index +j;
+            if(pos>=0 && pos<num_readings){
+                scan.ranges[index+j] = distance;
+                scan.intensities[index+j] = 0;
+            }else{
+                ROS_WARN("Cone out of bounds of laser scan, ignoreing point");
+            }
+            
+        }
+ 
+    }
+    
     return scan;
 }
 /**
@@ -604,22 +611,19 @@ void LidarProcessing::lidarCallback(const sensor_msgs::PointCloud2ConstPtr& msg)
     if(processingSteps){
         outputDebugClouds(fovTrimCloud,groundPlaneRemovalCloud,restoredCones);
     }
-    std::vector<double> coneAngles;
-    std::vector<Eigen::Vector4f> centres;
+
     for(int i =0; i<restoredCones.size(); i++){
         double validity = coneValiditycheck(restoredCones[i],lidarVerticalRes,lidarHorizontalRes);
         ROS_INFO("Cone %d Validity = %d",i, (int)validity);
+        PointCloud::Ptr cloud(new PointCloud);
+        cloud  = restoredCones[i];
 
         if(validity>=minimumCloudPercentage){
             cone_pub_.publish(createConeMessage(restoredCones[i],coneColourcheck(restoredCones[i])));
-            double angle = getConeAngle(centrePoint(restoredCones[i]));
-
-            //ROS_INFO("Angle of cone %d is %f", i, angle);
-            coneAngles.push_back(angle);
-            centres.push_back(centrePoint(restoredCones[i]));
         }
     }
-    psuedo_scan_pub_.publish(createDummyScan(coneAngles, centres));
+
+    psuedo_scan_pub_.publish(createDummyScan(restoredCones));
 }
 
 

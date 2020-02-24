@@ -30,8 +30,8 @@
 #include <pcl_ros/point_cloud.h>
 
 //typedef's for longer or common variable types
-typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
-typedef pcl::PointXYZ Point;
+typedef pcl::PointCloud<pcl::PointXYZI> PointCloud;
+typedef pcl::PointXYZI Point;
 
 class LidarProcessing{
 
@@ -199,11 +199,20 @@ class LidarProcessing{
         */
         void waitForSubscribers();
 
+        /**
+         * @brief Outputs the 3 main stages of the lidar pipeline to 3 seperate ros topics
+         * @param trimmedCloud pointcloud from the fov trimming stage 
+         * @param gprCloud pointcloud from ground plane removal stage
+         * @param restoredCones vector of all restored cones
+         */
         void outputDebugClouds(PointCloud::Ptr trimmedCloud, PointCloud::Ptr gprCloud, std::vector<PointCloud::Ptr>  restoredCones);
 
-        double getConeAngle(Eigen::Vector4f coneCentrePoint);
-
-        sensor_msgs::LaserScan createDummyScan(std::vector<double> coneAngles, std::vector<Eigen::Vector4f> centres);
+        /**
+         * @brief creates a fake laser scan message for use in gmapping tests
+         * @param coneClouds cones found during process
+         */
+        sensor_msgs::LaserScan createDummyScan(std::vector<PointCloud::Ptr> coneClouds);
+        
         /**
          * @brief Callback for recieving lidar data
          * @param msg a lidar message
@@ -211,7 +220,7 @@ class LidarProcessing{
         void lidarCallback(const sensor_msgs::PointCloud2ConstPtr& msg);
 
         //PCL Variables
-        pcl::PassThrough<pcl::PointXYZ> passThroughFilter; //For FOV Trimming and Ground Plane Removal
+        pcl::PassThrough<Point> passThroughFilter; //For FOV Trimming and Ground Plane Removal
         pcl::CropBox<Point> cropBoxFilter; //For Ground Plane Removal and Cone Restoration
         pcl::EuclideanClusterExtraction<Point> eucClustering; //For clustering
 
