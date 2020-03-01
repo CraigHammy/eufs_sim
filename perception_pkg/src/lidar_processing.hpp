@@ -6,6 +6,7 @@
 #include <string>
 #include <math.h>
 #include<iostream>
+#include <sstream>
 //ROS Inlcudes
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -30,8 +31,9 @@
 #include <pcl_ros/point_cloud.h>
 
 //typedef's for longer or common variable types
-typedef pcl::PointCloud<pcl::PointXYZI> PointCloud;
 typedef pcl::PointXYZI Point;
+typedef pcl::PointCloud<Point> PointCloud;
+
 
 class LidarProcessing{
 
@@ -205,14 +207,14 @@ class LidarProcessing{
          * @param gprCloud pointcloud from ground plane removal stage
          * @param restoredCones vector of all restored cones
          */
-        void outputDebugClouds(PointCloud::Ptr trimmedCloud, PointCloud::Ptr gprCloud, std::vector<PointCloud::Ptr>  restoredCones);
+        void outputDebugClouds(PointCloud::Ptr trimmedCloud, PointCloud::Ptr gprCloud, std::vector<PointCloud::Ptr> restoredCones, std::vector<PointCloud::Ptr> yellowCones, std::vector<PointCloud::Ptr> blueCones);
 
         /**
          * @brief creates a fake laser scan message for use in gmapping tests
          * @param coneClouds cones found during process
          */
         sensor_msgs::LaserScan createDummyScan(std::vector<PointCloud::Ptr> coneClouds);
-        
+
         /**
          * @brief Callback for recieving lidar data
          * @param msg a lidar message
@@ -233,6 +235,7 @@ class LidarProcessing{
         double minimumBoxSize; 
         double lidarVerticalRes, lidarHorizontalRes; //cone Validity Check
         int minimumCloudPercentage;
+        int coneColourBands; 
         std::string lidarTopic, coneTopic;
         int count_;
 
@@ -240,13 +243,17 @@ class LidarProcessing{
         ros::Subscriber lidar_sub_;
         ros::Publisher cone_pub_;
 
-        int processingSteps;
+        
         ros::Publisher fov_trim_pub_;	
         ros::Publisher ground_plane_removal_pub_;
         ros::Publisher restored_pub_;
+        ros::Publisher cone_marker_pub_;
+        ros::Publisher single_cone_pub_;
+        ros::Publisher yellow_cone_cloud_pub_,blue_cone_cloud_pub_;
 
         ros::Publisher psuedo_scan_pub_;
-
+        int forceSubs;
+        int processingSteps;
         bool initialised_;
         bool lidar_subscriber_active_, cone_publisher_ready_;
 

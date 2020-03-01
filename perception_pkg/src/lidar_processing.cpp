@@ -23,7 +23,10 @@ void LidarProcessing::initialise(){
 
         //Setup Publishers
         cone_pub_ = nh_.advertise<perception_pkg::Cone>(coneTopic, 1);
-        waitForPublishers();
+        if(forceSubs){
+            waitForPublishers();
+        }
+        
 
         psuedo_scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("/laserscan",50);
 
@@ -32,6 +35,10 @@ void LidarProcessing::initialise(){
             fov_trim_pub_ = nh_.advertise<PointCloud>("lidar_debug/fov_trimmed_cloud",1);
 		    ground_plane_removal_pub_ = nh_.advertise<PointCloud>("lidar_debug/gpr_cloud",1);
             restored_pub_ = nh_.advertise<PointCloud>("lidar_debug/restored_cones",1);
+            cone_marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("lidar_debug/cone_markers",1);
+            single_cone_pub_=nh_.advertise<PointCloud>("lidar_debug/single_cones",1);
+            yellow_cone_cloud_pub_=nh_.advertise<PointCloud>("lidar_debug/yellow_cones",1);
+            blue_cone_cloud_pub_=nh_.advertise<PointCloud>("lidar_debug/blue_cones",1);
         }
         
         initialised_=true;
@@ -153,6 +160,7 @@ void LidarProcessing::convertToROSBox(Eigen::Vector4f& pclMin, Eigen::Vector4f& 
  * @param negate negate action of filter (points outwith bounds will be kept) 
  */
 void LidarProcessing::passFilter(PointCloud::ConstPtr pclInputCloud, PointCloud::Ptr pclOutputCloud, std::string filterField, double lowerLimit, double upperLimit, bool negate){
+    
     passThroughFilter.setInputCloud(pclInputCloud);
     passThroughFilter.setFilterFieldName(filterField);
     passThroughFilter.setFilterLimits(lowerLimit,upperLimit);
@@ -341,6 +349,50 @@ double LidarProcessing::coneValiditycheck(PointCloud::ConstPtr pclInputCloud, do
  * @param pclInputCloud cone cloud that is to be checked for colour
  */
 std::string LidarProcessing::coneColourcheck(PointCloud::ConstPtr pclInputCloud){
+    
+    /* //Begin implementation of new method will need to add pass in of band step
+        Eigen::Vector4f min,max;
+        getBoundingBox(pclInputCloud, min,max);
+        float bands = coneColourBands; //Temp solution until call is changed
+        
+        float zDiff = max.z() -min.z(); //Total height of the cone cloud
+        size_t segSize;
+        for(float i = 0; i<bands; i++ ){
+            
+            float m = i/bands;
+            float zBandStart = min.z() + (m*zDiff);
+
+            float n = (i+1.0)/bands;
+            float zBandEnd = min.z() + (n*zDiff);
+            //ROS_INFO("M %f N %f", m,n);
+            //ROS_INFO("Band Start %f , Band End %f ", zBandStart, zBandEnd);
+            PointCloud::Ptr coneBand(new PointCloud);
+            passFilter(pclInputCloud,coneBand,"z",zBandStart,zBandEnd,false);
+
+            //Only begin next stage if band has points in it
+            if(coneBand->points.size()){
+                ROS_INFO("BAND %1f size %d", i+1, coneBand->points.size());
+                segSize += coneBand->points.size();  
+                float av =0;  
+                for(int j =0; j<coneBand->points.size(); j++){
+                    //ROS_INFO("Intensity value of point %d is %f",j, );
+                    av +=(float)coneBand->points[i].intensity;
+                    //std::cout<<"av "<<av<<" Current "<< coneBand->points[i].intensity << "\n";
+                }
+                //std::cout<<"\n";
+                av = av/coneBand->points.size();
+                ROS_INFO("Average Value %f", av);
+
+            }
+            
+        }
+        //Warn if points have been duplicated during splitting
+        if(segSize>pclInputCloud->points.size() || segSize<pclInputCloud->points.size()){
+            ROS_WARN("Points have been lost or duplicated: Original Size %d Segmented Size %d", pclInputCloud->size(), segSize);     
+        } 
+    */
+
+    //Old method of determining colour
     Eigen::Vector4f centre = centrePoint(pclInputCloud);
     if(centre.y()>0){
         return "blue";
@@ -430,7 +482,10 @@ void LidarProcessing::defaultParams(){
 
     minimumCloudPercentage = 0.5;
 
+    coneColourBands = 10;
+
     processingSteps = 1;
+    forceSubs= 0;
 
 }
 
@@ -507,8 +562,8 @@ void LidarProcessing::waitForSubscribers(){
  * @param gprCloud pointcloud from ground plane removal stage
  * @param restoredCones vector of all restored cones
  */
-void LidarProcessing::outputDebugClouds(PointCloud::Ptr trimmedCloud, PointCloud::Ptr gprCloud, std::vector<PointCloud::Ptr> restoredCones){
-    sensor_msgs::PointCloud2 fovTrimmed, gpr, restored;
+void LidarProcessing::outputDebugClouds(PointCloud::Ptr trimmedCloud, PointCloud::Ptr gprCloud, std::vector<PointCloud::Ptr> restoredCones, std::vector<PointCloud::Ptr> yellowCones, std::vector<PointCloud::Ptr> blueCones){
+    sensor_msgs::PointCloud2 fovTrimmed, gpr, restored, blueConesMessage, yellowConesMessage;
     convertToROS(trimmedCloud,&fovTrimmed);
     fovTrimmed.header.frame_id = "velodyne";
     fov_trim_pub_.publish(fovTrimmed);
@@ -517,14 +572,68 @@ void LidarProcessing::outputDebugClouds(PointCloud::Ptr trimmedCloud, PointCloud
     gpr.header.frame_id = "velodyne";
     ground_plane_removal_pub_.publish(gpr);
 
+    visualization_msgs::MarkerArray cones;
     PointCloud::Ptr restoredConeCloud(new PointCloud);
     for(int i =0; i<restoredCones.size(); i++){
+        sensor_msgs::PointCloud2 cone; 
+        convertToROS(restoredCones[i],&cone);
+        cone.header.frame_id = "velodyne";
+        single_cone_pub_.publish(cone);
+
         *restoredConeCloud += *restoredCones[i];
+        visualization_msgs::Marker mark;
+
+        mark.header.frame_id = "velodyne";
+        mark.header.stamp = ros::Time::now();
+        mark.ns = "Cones";
+        mark.id = i;
+        mark.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+        mark.action = visualization_msgs::Marker::ADD;
+
+        Eigen::Vector4f centre, min,max;
+        centre = centrePoint(restoredCones[i]);
+        getBoundingBox(restoredCones[i],min,max);
+
+        mark.pose.position.x = centre.x();
+        mark.pose.position.y = centre.y();
+        mark.pose.position.z = (max.z() +0.1);
+        mark.scale.x = 0.1;
+        mark.scale.y = 0.1;
+        mark.scale.z = 0.2;
+        mark.color.a = 1.0;
+        mark.color.g = 1.0;
+
+        std::ostringstream stm;
+        stm<<i;
+        std::string s = "Cone " + stm.str(); 
+        mark.text = s;
+        cones.markers.push_back(mark);
+
     }
+    cone_marker_pub_.publish(cones);
 
     convertToROS(restoredConeCloud,&restored);
     restored.header.frame_id = "velodyne";
     restored_pub_.publish(restored);
+
+    PointCloud::Ptr yellowConeCloud(new PointCloud);
+    for(int i =0; i<yellowCones.size(); i++){
+        *yellowConeCloud+=*yellowCones[i];
+    }
+    convertToROS(yellowConeCloud,&yellowConesMessage);
+    yellowConesMessage.header.frame_id="velodyne";
+    yellow_cone_cloud_pub_.publish(yellowConesMessage);
+
+    PointCloud::Ptr blueConeCloud(new PointCloud);
+    for(int i =0; i<blueCones.size(); i++){
+        *blueConeCloud+=*blueCones[i];
+    }
+    convertToROS(blueConeCloud,&blueConesMessage);
+    blueConesMessage.header.frame_id="velodyne";
+    blue_cone_cloud_pub_.publish(blueConesMessage);
+
+
+    
 }
 
 /**
@@ -587,7 +696,7 @@ sensor_msgs::LaserScan LidarProcessing::createDummyScan(std::vector<PointCloud::
  */
 void LidarProcessing::lidarCallback(const sensor_msgs::PointCloud2ConstPtr& msg){
 
-    ROS_INFO("Attempting to Find Cones");
+    ROS_WARN("Attempting to Find Cones");
     ros::Time begin = ros::Time::now();
 
     PointCloud::Ptr rawCloud(new PointCloud);
@@ -603,26 +712,33 @@ void LidarProcessing::lidarCallback(const sensor_msgs::PointCloud2ConstPtr& msg)
     eucCluster(groundPlaneRemovalCloud, clusterIndices, eucMaximumDistance, eucMinimumClusterSize, eucMaximumClusterSize);
 
     std::vector<PointCloud::Ptr> cones = extractCandidates(groundPlaneRemovalCloud, clusterIndices);
-    ROS_INFO("Cone Candidates %d", (int)cones.size());
 
     std::vector<PointCloud::Ptr> restoredCones = restoreCandidates(rawCloud, cones);
-    ROS_INFO("Cones Restored %d" , (int)restoredCones.size());
-    
-    if(processingSteps){
-        outputDebugClouds(fovTrimCloud,groundPlaneRemovalCloud,restoredCones);
-    }
-
+    ROS_INFO("Cones Found: %d" , (int)restoredCones.size());
+    std::vector<PointCloud::Ptr> yellow;
+    std::vector<PointCloud::Ptr> blue;
     for(int i =0; i<restoredCones.size(); i++){
         double validity = coneValiditycheck(restoredCones[i],lidarVerticalRes,lidarHorizontalRes);
-        ROS_INFO("Cone %d Validity = %d",i, (int)validity);
-        PointCloud::Ptr cloud(new PointCloud);
-        cloud  = restoredCones[i];
+        Eigen::Vector4f centre= centrePoint(restoredCones[i]);
+        ROS_INFO("Cone %d Pos X: %f Y: %f Z: %f Validity: %d",i,centre.x(),centre.y(),centre.z(), (int)validity);
+
 
         if(validity>=minimumCloudPercentage){
-            cone_pub_.publish(createConeMessage(restoredCones[i],coneColourcheck(restoredCones[i])));
+            std::string colour = coneColourcheck(restoredCones[i]);
+
+            if(colour=="yellow"){
+                yellow.push_back(restoredCones[i]);
+            }else if(colour=="blue"){
+                blue.push_back(restoredCones[i]);
+            }
+
+            cone_pub_.publish(createConeMessage(restoredCones[i],colour));
         }
     }
 
+    if(processingSteps){
+        outputDebugClouds(fovTrimCloud,groundPlaneRemovalCloud,restoredCones, yellow, blue);
+    }
     psuedo_scan_pub_.publish(createDummyScan(restoredCones));
 }
 

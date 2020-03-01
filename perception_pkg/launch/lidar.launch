@@ -1,10 +1,10 @@
 <launch>
 
     <!-- Topics used in implementation -->
-    <arg name="lidar_topic"              default="/velodyne"/>
+    <arg name="lidar_topic"             default="/velodyne_points"/>
     <arg name="cone_topic"              default="/cones"/>
 
-    <node pkg="perception_pkg" type="lidar_perception" name="PCL_Listener" output="screen">
+    <node pkg="perception_pkg" type="lidar_processing" name="lidar_Processing_Node" output="screen">
         <!--Parameters for FOV Trimming-->
         <param name="fov_trimming_lower_limit" type="double"   value="0.0"/>
         <param name="fov_trimming_upper_limit" type="double"   value="5.0"/>
@@ -36,5 +36,6 @@
         <!-- Common parameters -->
         <param name="lidar"             type="str"      value="$(arg lidar_topic)"/>
         <param name="cone"              type="str"      value="$(arg cone_topic)"/>
+        <param name="use_sim_time" value="true"/>
     </node>
 </launch>

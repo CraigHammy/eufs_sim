@@ -5,10 +5,11 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /Restored Cones (Blue)1
-        - /LaserScan1
+        - /TF1
+        - /TF1/Frames1
+        - /MarkerArray1
       Splitter Ratio: 0.663888872
-    Tree Height: 775
+    Tree Height: 768
   - Class: rviz/Selection
     Name: Selection
   - Class: rviz/Tool Properties
@@ -27,7 +28,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: LaserScan
+    SyncSource: Yellow Cones (Yellow)
 Toolbars:
   toolButtonStyle: 2
 Visualization Manager:
@@ -164,98 +165,19 @@ Visualization Manager:
       Value: true
       Visual Enabled: true
     - Class: rviz/TF
-      Enabled: true
+      Enabled: false
       Frame Timeout: 15
       Frames:
-        All Enabled: true
-        base_footprint:
-          Value: true
-        base_link:
-          Value: true
-        gps_base_link:
-          Value: true
-        imu_base_link:
-          Value: true
-        left_front_axle_carrier:
-          Value: true
-        left_front_wheel:
-          Value: true
-        left_rear_axle_carrier:
-          Value: true
-        left_rear_wheel:
-          Value: true
-        left_steering_link:
-          Value: true
-        odom:
-          Value: true
-        odom_ground_truth:
-          Value: true
-        right_front_axle_carrier:
-          Value: true
-        right_front_wheel:
-          Value: true
-        right_rear_axle_carrier:
-          Value: true
-        right_rear_wheel:
-          Value: true
-        right_steering_link:
-          Value: true
-        velodyne:
-          Value: true
-        velodyne_base_link:
-          Value: true
-        zed_center:
-          Value: true
-        zed_frame:
-          Value: true
-        zed_left_camera:
-          Value: true
-        zed_left_camera_optical_frame:
-          Value: true
-        zed_right_camera:
-          Value: true
+        All Enabled: false
       Marker Scale: 1
       Name: TF
       Show Arrows: true
       Show Axes: true
-      Show Names: false
+      Show Names: true
       Tree:
-        odom:
-          base_footprint:
-            base_link:
-              gps_base_link:
-                {}
-              imu_base_link:
-                {}
-              left_rear_axle_carrier:
-                left_rear_wheel:
-                  {}
-              left_steering_link:
-                left_front_axle_carrier:
-                  left_front_wheel:
-                    {}
-              odom_ground_truth:
-                {}
-              right_rear_axle_carrier:
-                right_rear_wheel:
-                  {}
-              right_steering_link:
-                right_front_axle_carrier:
-                  right_front_wheel:
-                    {}
-              velodyne_base_link:
-                velodyne:
-                  {}
-              zed_center:
-                zed_left_camera:
-                  zed_left_camera_optical_frame:
-                    {}
-                zed_right_camera:
-                  {}
-              zed_frame:
-                {}
+        {}
       Update Interval: 0
-      Value: true
+      Value: false
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -308,7 +230,7 @@ Visualization Manager:
       Position Transformer: XYZ
       Queue Size: 10
       Selectable: false
-      Size (Pixels): 5
+      Size (Pixels): 3
       Size (m): 0.00999999978
       Style: Points
       Topic: /lidar_debug/fov_trimmed_cloud
@@ -338,7 +260,7 @@ Visualization Manager:
       Position Transformer: XYZ
       Queue Size: 10
       Selectable: true
-      Size (Pixels): 9
+      Size (Pixels): 3
       Size (m): 0.00999999978
       Style: Points
       Topic: /lidar_debug/gpr_cloud
@@ -355,23 +277,83 @@ Visualization Manager:
       Axis: Z
       Channel Name: intensity
       Class: rviz/PointCloud2
+      Color: 255; 85; 0
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: false
+      Invert Rainbow: false
+      Max Color: 0; 0; 0
+      Max Intensity: 3.87955466e-37
+      Min Color: 255; 255; 255
+      Min Intensity: 5.87144057e-43
+      Name: Restored Cones (Orange)
+      Position Transformer: XYZ
+      Queue Size: 1
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.00999999978
+      Style: Points
+      Topic: /lidar_debug/restored_cones
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: false
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 255; 255; 0
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 3.87955466e-37
+      Min Color: 0; 0; 0
+      Min Intensity: 2.10755289e-42
+      Name: Yellow Cones (Yellow)
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.00999999978
+      Style: Points
+      Topic: /lidar_debug/yellow_cones
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
       Color: 0; 0; 255
       Color Transformer: FlatColor
       Decay Time: 0
       Enabled: true
       Invert Rainbow: false
-      Max Color: 0; 0; 0
-      Max Intensity: 999999
-      Min Color: 255; 255; 255
-      Min Intensity: 999999
-      Name: Restored Cones (Blue)
+      Max Color: 255; 255; 255
+      Max Intensity: 5.87144057e-43
+      Min Color: 0; 0; 0
+      Min Intensity: 5.87144057e-43
+      Name: Blue Cones (Blue)
       Position Transformer: XYZ
-      Queue Size: 1
+      Queue Size: 10
       Selectable: true
-      Size (Pixels): 7
+      Size (Pixels): 3
       Size (m): 0.00999999978
       Style: Points
-      Topic: /lidar_debug/restored_cones
+      Topic: /lidar_debug/blue_cones
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
@@ -386,15 +368,15 @@ Visualization Manager:
       Channel Name: intensities
       Class: rviz/LaserScan
       Color: 255; 255; 255
-      Color Transformer: Intensity
+      Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 0
       Min Color: 0; 0; 0
       Min Intensity: 0
-      Name: LaserScan
+      Name: Psuedo Scan (White)
       Position Transformer: XYZ
       Queue Size: 10
       Selectable: true
@@ -405,12 +387,20 @@ Visualization Manager:
       Unreliable: true
       Use Fixed Frame: true
       Use rainbow: true
+      Value: false
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /lidar_debug/cone_markers
+      Name: MarkerArray
+      Namespaces:
+        Cones: true
+      Queue Size: 100
       Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
     Default Light: true
-    Fixed Frame: base_footprint
+    Fixed Frame: odom
     Frame Rate: 30
   Name: root
   Tools:
@@ -431,25 +421,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/ThirdPersonFollower
-      Distance: 13.7215405
+      Distance: 14.0020313
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.291054487
-        Y: 1.05829382
-        Z: 0
+        X: -0.828409195
+        Y: 2.73790097
+        Z: 0.0623047873
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.0500000007
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.00999999978
-      Pitch: 0.8447963
-      Target Frame: <Fixed Frame>
+      Pitch: 0.834796906
+      Target Frame: velodyne
       Value: ThirdPersonFollower (rviz)
-      Yaw: 3.06037951
+      Yaw: 2.64354634
     Saved: ~
 Window Geometry:
   Displays:
@@ -457,7 +447,7 @@ Window Geometry:
   Height: 1056
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd00000004000000000000022200000396fc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000006100fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000002800000396000000d700fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000c00430061006d00650072006101000003a8000000160000000000000000000000010000010f00000396fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000002800000396000000ad00fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000007800000003efc0100000002fb0000000800540069006d00650100000000000007800000030000fffffffb0000000800540069006d00650100000000000004500000000000000000000004430000039600000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd00000004000000000000022200000393fc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000006300fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000002800000393000000db00fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000c00430061006d00650072006101000003a8000000160000000000000000000000010000010f00000393fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000002800000393000000b300fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000007800000003ffc0100000002fb0000000800540069006d00650100000000000007800000031700fffffffb0000000800540069006d00650100000000000004500000000000000000000004430000039300000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:

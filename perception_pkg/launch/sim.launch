@@ -1,0 +1,8 @@
+<launch>
+
+    <include file="$(find perception_pkg)/launch/lidar.launch"/>
+    <include file="$(find eufs_gazebo)/launch/small_track.launch"/>
+
+    <node type="rviz" name="rviz" pkg="rviz" args="-d $(find eufs_description)/launch/eufs.rviz"/>
+
+</launch>
