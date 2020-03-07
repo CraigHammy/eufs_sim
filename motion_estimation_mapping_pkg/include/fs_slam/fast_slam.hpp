@@ -7,6 +7,9 @@
 #include <ackermann_msgs/AckermannDriveStamped.h>
 #include <sensor_msgs/JointState.h>
 #include <perception_pkg/Cone.h>
+#include <vector>
+#include <Eigen/Core>
+#include "boost/random.hpp"
 
 class StateEstimation
 {
@@ -14,7 +17,14 @@ class StateEstimation
 public:
     StateEstimation(int num_particles, int num_landmarks, int update_frequency): num_particles_(num_particles), state_size_(3),
         num_landmarks_(num_landmarks), lm_size_(2), num_particles_resampling_(num_particles / 1.5),
-        update_frequency_(update_frequency) {};
+        update_frequency_(update_frequency), pose_(Eigen::Vector3f::Zero()) 
+        {
+            for (int i = 0; i != num_particles; ++i)
+            {
+                Particle particle;
+                particles_.push_back(particle);
+            }
+        };
 
     /**
      * @brief Initialise a StateEstimation object and the Particles objects
@@ -44,6 +54,11 @@ public:
      */
     void resampling();
 
+    /**
+     * @brief Updates the SLAM estimate with the re-sampled particles and updated weights 
+     * @return A 3D Eigen Vector representing the final SLAM estimate for the current iteration
+     */
+    Eigen::Vector3f calculateFinalEstimate();
     
 private:
     /**
@@ -82,13 +97,7 @@ private:
      */
     void coneCallback(const perception_pkg::Cone::ConstPtr& msg);
 
-    /**
-     * @brief Updates the SLAM estimate with the re-sampled particles and updated weights 
-     * @return A 3D Eigen Vector representing the final SLAM estimate for the current iteration
-     */
-    Eigen::Vector3f calculateFinalEstimate();
-
-    static std::default_random_engine rng;
+    boost::random::mt19937 rng;
 
     //ROS variables 
     ros::NodeHandle nh_;
@@ -117,21 +126,21 @@ private:
     std::vector<Particle> particles_;
 
     //SLAM phase switch 
-    bool lap_closure_detected_ = false;
+    bool lap_closure_detected_;
 
     //position and velocity odometric estimates
-    RobotPose pose_;
+    Eigen::Vector3f pose_;
 
     //robot motion commands
     RobotCommand u_;
 
     //robot joint states variables 
     sensor_msgs::JointState joint_state_;
-    bool read_state_ = false;
+    bool read_state_;
     int frw_pos_, flw_pos_, brw_vel_, blw_vel_;
     
     //FastSLAM algorithm noise 
-    Eigen::Matrix3f R_; //linearized vehicle measurement noise 
+    Eigen::Matrix2f R_; //linearized vehicle measurement noise 
     Eigen::Matrix2f Q_; //linearized vehicle control noise 
 };
 

@@ -7,7 +7,18 @@
 #include <nav_msgs/Odometry.h>
 #include <ackermann_msgs/AckermannDriveStamped.h>
 #include <Eigen/Cholesky>
+#include <Eigen/Core>
 #include <cmath>
+#include <vector>
+#include <algorithm>
+#include <string>
+#include <iostream>
+#include <stdint.h>
+#include <ctime>
+#include <fstream>
+
+std::time_t now = std::time(0);
+boost::random::mt19937 rng(static_cast<uint32_t>(now));
 
 /**
  * @brief Initialise a StateEstimation object and the Particles objects
@@ -23,10 +34,10 @@ void StateEstimation::initialise()
     nh_.param("max_steering", max_steering_);
     nh_.param("wheel_base", wheel_base_);
     nh_.param("wheel_diameter", wheel_diameter_);
-    nh_.param("control_noise_velocity", sigmaV, float(0.3));
-    nh_.param("control_noise_steering_angle", sigmaG, float(3.0 * M_PI / 180));
-    nh_.param("measurement_noise_euclidean_distance", sigmaR, float(0.1));
-    nh_.param("measurement_noise_angle_difference", sigmaB, float(1.0 * M_PI / 180));
+    nh_.param("control_noise_velocity", sigmaV, float(1.0));
+    nh_.param("control_noise_steering_angle", sigmaG, float(2.5 * M_PI / 180));
+    nh_.param("measurement_noise_euclidean_distance", sigmaR, float(0.5));
+    nh_.param("measurement_noise_angle_difference", sigmaB, float(2.5 * M_PI / 180));
     nh_.param("resampling_ratio_particles", resampling_ratio_, float(num_particles_ * 0.75));
 
     //get joint state values to retrieve current linear speed and steering angle of the car 
@@ -43,6 +54,9 @@ void StateEstimation::initialise()
 
     //initialise measurement noise covariance matrix
     R_ << powf(sigmaR, 2), 0, 0, powf(sigmaB, 2);
+
+    lap_closure_detected_ = false;
+    read_state_ = false;
 }
 
 /**
@@ -73,20 +87,21 @@ void StateEstimation::normaliseWeights()
 {   
     //sum weights of all particles 
     double sum_w = 0.0;
-    for(auto& p: particles_)
-            sum_w += p.weight_;
+    std::vector<Particle>::iterator p;
+    for(p = particles_.begin(); p != particles_.end(); ++p)
+            sum_w += p->weight_;
     
     //normalize particle weights using sum of all weights
     try 
     {
-        for(auto& p: particles_)
-            p.weight_ /= sum_w;
+        for(p = particles_.begin(); p != particles_.end(); ++p)
+            p->weight_ /= sum_w;
     } 
     //if division by zero occurs, normalize weights using number of particles variable 
     catch(std::runtime_error& e) 
     {
-        for(auto& p: particles_)
-            p.weight_ = 1.0 / num_particles_;
+        for(p = particles_.begin(); p != particles_.end(); ++p)
+            p->weight_ = 1.0 / num_particles_;
     }   
 }
 
@@ -96,15 +111,10 @@ void StateEstimation::normaliseWeights()
  */
 void StateEstimation::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
-    //odometry twist 
-    pose_.odom_twist_(0) = msg->twist.twist.linear.x;
-    pose_.odom_twist_(1) = msg->twist.twist.linear.y;
-    pose_.odom_twist_(2) = msg->twist.twist.angular.z;
-
     //odometry pose 
-    pose_.odom_pose_(0) = msg->pose.pose.position.x;
-    pose_.odom_pose_(1) = msg->pose.pose.position.y;
-    pose_.odom_pose_(2) = msg->pose.pose.orientation.z;
+    pose_(0) = msg->pose.pose.position.x;
+    pose_(1) = msg->pose.pose.position.y;
+    pose_(2) = msg->pose.pose.orientation.z;
 }
 
 /**
@@ -150,11 +160,11 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
  * @param Gv Eigen 3x2 Jacobian matrix with respect to control
  * @param Q Eigen 2x2 covariance matrix of control noise
  */
-void Particle::motionModelUpdate(RobotPose& current_pose, float speed, float steer, float wb, float delta, Eigen::Matrix3f Gx, Eigen::Matrix3Xf Gu, Eigen::Matrix2f Q)
+void Particle::motionUpdate(const Eigen::Vector3f& current_pose, float speed, float steer, float wb, float delta, const Eigen::Matrix3f& Gx, const Eigen::Matrix<float, 3, 2>& Gu, const Eigen::Matrix2f& Q)
 {
     //calculate the difference from the last known pose
-    float delta_x = speed * cosf(current_pose.odom_pose_(2)) * delta;
-    float delta_y = speed * sinf(current_pose.odom_pose_(2)) * delta;
+    float delta_x = speed * cosf(current_pose(2)) * delta;
+    float delta_y = speed * sinf(current_pose(2)) * delta;
     float delta_th = (speed * delta * tanf(steer)) / wb;
 
     //predict the particle mean 
@@ -197,7 +207,7 @@ void StateEstimation::prediction()
     float dt = 1.0 / update_frequency_;
 
     //current yaw pose
-    float current_yaw = pose_.odom_pose_(3);
+    float current_yaw = pose_(2);
 
     //Jacobian with respect to location
     Eigen::Matrix3f Gx;
@@ -205,13 +215,14 @@ void StateEstimation::prediction()
         0, 1, speed * dt * cosf(current_yaw), 0, 0, 1;
 
     //Jacobian with respect to control
-    Eigen::Matrix3Xf Gu;
+    Eigen::Matrix<float, 3, 2> Gu;
     Gu << dt * cosf(current_yaw), -speed * dt * sinf(current_yaw), dt * sinf(current_yaw),
         speed * dt * cosf(current_yaw), dt * tanf(steering_angle) / wheel_base_, 
         speed * dt / (pow(cosf(steering_angle), 2) * wheel_base_);
     
-    for (auto& p: particles_)
-        p.motionModelUpdate(pose_, speed, steering_angle, wheel_base_, dt, Gx, Gu, Q_);
+    std::vector<Particle>::iterator p;
+    for (p = particles_.begin(); p != particles_.end(); ++p)
+        p->motionUpdate(pose_, speed, steering_angle, wheel_base_, dt, Gx, Gu, Q_);
 }
 
 /**
@@ -221,8 +232,61 @@ void StateEstimation::prediction()
  */
 void StateEstimation::correction(const std::vector<perception_pkg::Cone>& observations, SLAM_PHASE slam_phase)
 {
-    for (auto& p: particles_)
-        p.measurementModelUpdate(observations, pose_, R_, slam_phase);
+    std::vector<Particle>::iterator p;
+    std::vector<perception_pkg::Cone>::const_iterator z;
+
+    int obsnum = 1;
+    for(z = observations.begin(); z != observations.end(); ++z)
+    {
+        for (p = particles_.begin(); p != particles_.end(); ++p)
+        {
+            //unknwon data association
+            p->measurementUpdate(*z, pose_, R_, Q_, slam_phase);
+            if ((p->unknown_features_.size() + p->landmarks_.size()) > 6)
+            {
+                ROS_ERROR("error");
+                //exit(0);
+            }
+        }
+    }
+
+    for (p = particles_.begin(); p != particles_.end(); ++p)
+    {     
+        if (p->known_features_.size() != 0)   
+        {
+            p->proposalSampling(p->known_features_, R_);
+
+            std::vector<DataAssociation>::const_iterator k; 
+            for (k = p->known_features_.begin(); k != p->known_features_.end(); ++k)
+            {
+                Innovation new_innovation(computeInnovations(p->mu_, p->sigma_, p->landmarks_.at(k->landmark_id), R_));
+                Eigen::Matrix<float, 2, 3> new_Hv(new_innovation.vehicle_jacobian);
+                Eigen::Matrix2f new_Hl(new_innovation.feature_jacobian);
+                Eigen::Vector2f new_zt(new_innovation.predicted_observation);
+                Eigen::Matrix2f new_lm_innov_cov(new_innovation.innovation_covariance);
+
+                Eigen::Vector2f measurement(k->measurement);
+                Eigen::Vector2f new_lm_innov_mean(measurement - new_zt);
+                new_lm_innov_mean(1) = angleWrap(new_lm_innov_mean(1));
+                
+                //for the known feature, calculate importance factor and update the weight of the particle
+                float weight = p->calculateWeight(new_lm_innov_mean, p->landmarks_.at(k->landmark_id).sigma_, new_Hl, new_Hv, R_);
+                p->weight_ *= weight;
+
+                //update landmark with Cholesky decomposition that is more computationally efficient
+                p->updateLandmarkWithCholesky(p->landmarks_.at(k->landmark_id), new_Hl, new_lm_innov_cov, new_lm_innov_mean);
+            }
+            p->known_features_.clear();
+        }
+
+        //iterating through unknown features
+        std::vector<DataAssociation>::const_iterator u; 
+        for (u = p->unknown_features_.begin(); u != p->unknown_features_.end(); ++u)
+        {
+            p->addNewLandmark(u->measurement, u->colour, R_);
+        }
+        p->unknown_features_.clear();
+    }
 }
 
 /**
@@ -231,102 +295,78 @@ void StateEstimation::correction(const std::vector<perception_pkg::Cone>& observ
  * @param current_pose A RobotPose object 
  * @param slam_phase The phase (mapping or localization) the car is currently executing 
  */
-void Particle::measurementModelUpdate(const std::vector<perception_pkg::Cone>& observations, RobotPose& current_pose, Eigen::Matrix2f R, SLAM_PHASE slam_phase)
+void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f& current_pose, const Eigen::Matrix2f& R, const Eigen::Matrix2f& Q, SLAM_PHASE slam_phase)
 {
-    //https://books.google.it/books?id=8pYTVcCRXdcC&pg=PA33&lpg=PA33&dq=FastSLAM+weight+calculation&source=bl&ots=sBNBxb1gM-&sig=ACfU3U38pJJVrLN5B5-A3cORIwQYFxY3Yw&hl=en&sa=X&ved=2ahUKEwjL-eTmo-fmAhXMbFAKHdhoAmAQ6AEwAHoECAoQAQ#v=onepage&q=FastSLAM%20weight%20calculation&f=false
-    //shuffle observations to improve greedy association results
-    std::shuffle(observations.begin(), observations.end(), rng);
 
-    //data association variables 
-    Eigen::Matrix2f best_Hv;
-    Eigen::Matrix2f best_Hl;
-    Eigen::Matrix2f best_innov_cov;
-    Eigen::Vector2f best_innov_mean;
-    float best_p;
-    int best_arg, count;
+    boost::shared_ptr<geometry_msgs::Point> z_ptr(new geometry_msgs::Point((z).location));
+    Eigen::Vector2f measurement(getMeasurement(z_ptr));
 
-    for(const auto& z: observations)
+    //add some noise to the range observations
+    boost::random::uniform_real_distribution<float> distribution(0.0, 1.0);
+
+    //assume the observations received are all unique and not repeated
+    if(landmarks_.empty())
     {
-        //retrieve the measurement from the sensor reading 
-        boost::shared_ptr<geometry_msgs::Point> z_ptr(new geometry_msgs::Point(z.location));
-        Eigen::Vector2f measurement(getMeasurement(z_ptr, current_pose.odom_pose_(2)));
+        //add the first landmark to the particle
+        addNewLandmark(measurement, z.colour, R);     
+        return;
+    }
+    
+    //data association variables
+    Eigen::Matrix<float, 2, 3> best_Hv = Eigen::Matrix<float, 2, 3>::Zero();
+    Eigen::Matrix2f best_Hl = Eigen::Matrix2f::Zero();
+    Eigen::Matrix2f best_innov_cov = Eigen::Matrix2f::Zero();
+    Eigen::Vector2f best_innov_mean = Eigen::Vector2f::Zero();
+    float best_p = 0;
+    int best_arg = 0;
+    
+    int i = 0;
+    std::vector<Landmark>::const_iterator lm;
+    for(lm = landmarks_.begin(); lm != landmarks_.end(); ++lm, ++i)
+    {        
+        Innovation innovation(computeInnovations(mu_, sigma_, *lm, R));
+        Eigen::Matrix<float, 2, 3> Hv(innovation.vehicle_jacobian);
+        Eigen::Matrix2f Hl(innovation.feature_jacobian);
+        Eigen::Vector2f zt(innovation.predicted_observation);
+        Eigen::Matrix2f lm_innov_cov(innovation.innovation_covariance);
+        
+        Eigen::Vector2f lm_innov_mean(measurement - zt);
+        lm_innov_mean(1) = angleWrap(lm_innov_mean(1));
 
-        //assume the observations received are all unique and not repeated
-        if(landmarks_.empty()) 
+        //perform data association to distinguish new features, and assigning correct observations to known features
+        float p = dataAssociations(lm_innov_cov, lm_innov_mean, Hv, zt, z, *lm, R);
+        
+        if ((i == 0) || (p > best_p))  
         {
-            //add the first landmark to the particle
-            addNewLandmark(measurement, z.colour, R);
-        } 
-        else 
-        {
-            //set everything to zero
-            best_p = 0.0;
-            best_arg, count = 0, 0;
-            best_Hv.setZero();
-            best_Hl.setZero();
-            best_innov_mean.setZero();
-            best_innov_cov.setZero();
+            best_p = p;
+            best_arg = i;
+            best_Hv = Hv;
+            best_innov_cov = lm_innov_cov;
+            best_innov_mean = lm_innov_mean;
+        }
+    }
 
-            for(auto& lm: landmarks_)
-            {
-                //calculate euclidean distance from current pose to landmark 
-                float dx = lm.mu_(0) - mu_(0); 
-                float dy = lm.mu_(1) - mu_(1);
-                float d2 = powf(dx, 2) + powf(dy, 2);
-                float d = sqrtf(d2);
-                
-                //Jacobian with respect to vehicle state 
-                Eigen::Matrix2Xf Hv;
-                Hv << -dx / d, -dy / d, 0, dy / d2, -dx / d2, -1;
-
-                //Jacobian with respect to landmark state 
-                Eigen::Matrix2f Hl;
-                Hl << dx / d, dy / d, -dy / d2, dx / d2;
-
-                //measurement in the form of range and bearing to landmark from robot pose
-                float theta = angleWrap(atan2f(dy, dx) - mu_(2));
-                Eigen::Vector2f zt;
-                zt << d, theta;
-
-                //innovation covariance of observed landmark 
-                Eigen::Matrix2f lm_innov_cov(Hl * lm.sigma_ * Hl.transpose() + R);
-                Eigen::Vector2f lm_innov_mean(measurement - zt); 
-
-                //sample new pose from proposal distribution
-                float p = proposalSampling(lm_innov_cov, lm_innov_mean, Hv, zt);
-
-                if (p > best_p)
-                {
-                    best_p = p;
-                    best_arg = count;
-                    best_Hv = Hv;
-                    best_innov_cov = lm_innov_cov;
-                    best_innov_mean = lm_innov_mean;
-                }
-                ++count;
-            }
-            
-            //new feature 
-            if (best_p < NEW_LANDMARK_THRESH)
-            {
-                //new landmark detected
-                addNewLandmark(measurement, z.colour, R);
-                continue;
-            }
-   
-            //for the known feature, calculate importance factor and update the weight of the particle  
-            float weight = calculateWeight(best_innov_mean, landmarks_.at(best_arg).sigma_, best_Hl, best_Hv, R);
-            weight_ *= weight;
-            //update landmark with Cholesky decomposition that is more computationally efficient 
-            updateLandmarkWithCholesky(landmarks_.at(best_arg), best_Hl, best_innov_cov, best_innov_mean);
-
-            if (slam_phase == MAP_BUILDING) {
-                //do stuff
-            }
-            else if (slam_phase == LOCALIZATION) {
-                //do stuff 
-            }             
-        } 
+    Eigen::Vector2f map_feature(z.location.x + mu_(0), z.location.y + mu_(1));
+    if ((best_p < 0.00001) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.5))
+    {
+        DataAssociation d;
+        d.measurement = measurement;
+        d.landmark_id = best_arg;
+        unknown_features_.push_back(d);
+    }
+    else 
+    {       
+        DataAssociation d;
+        d.measurement = measurement;
+        d.landmark_id = best_arg;     
+        known_features_.push_back(d);
+    }
+    
+    if (slam_phase == MAP_BUILDING) {
+        ;//do stuff
+    }
+    else if (slam_phase == LOCALIZATION) {
+        ;//do stuff
     }
 }
 
@@ -336,12 +376,12 @@ void Particle::measurementModelUpdate(const std::vector<perception_pkg::Cone>& o
  * @param colour The colour of the cone landmark 
  * @param R Eigen 2x2 covariance matrix of measurement noise
  */
-void Particle::addNewLandmark(const Eigen::Vector2f& ob, std::string colour, Eigen::Matrix2f R)
+void Particle::addNewLandmark(const Eigen::Vector2f& ob, const std::string& colour, const Eigen::Matrix2f& R)
 {
     Landmark landmark;
     //sine and cosine of yaw angle 
-    float s = sinf(ob(1));
-    float c = cosf(ob(1));
+    float s = sinf(angleWrap(mu_(2) + ob(1)));
+    float c = cosf(angleWrap(mu_(2) + ob(1)));
 
     //x and y values of landmark respect to robot pose (maybe do it in map frame)
     float lm_x = mu_(0) + ob(0)*c;
@@ -352,7 +392,7 @@ void Particle::addNewLandmark(const Eigen::Vector2f& ob, std::string colour, Eig
 
     //landmark covariance
     Eigen::Matrix2f G;
-    G << c, -mu_(0) * s, s, mu_(0) * c;
+    G << c, -ob(0) * s, s, ob(0) * c;
     landmark.sigma_  << G * R * G.transpose();   
 
     //landmark cone colour
@@ -368,17 +408,17 @@ void Particle::addNewLandmark(const Eigen::Vector2f& ob, std::string colour, Eig
  * @param innov_mean Eigen 2x1 innovation mean vector of observed landmark
  * @param lm_sigma Eigen 2x2 covariance matrix of the landmark 
  * @param Hl Eigen 2x2 Jacobian matrix with respect to the landmark location
- * @param Hv Eigen 2x2 Jacobian matrix with respect to the robot location
+ * @param Hv Eigen 2x3 Jacobian matrix with respect to the robot location
  * @param R Eigen 2x2 covariance matrix of measurement noise
  * @return The calculated weight 
  */
-float Particle::calculateWeight(const Eigen::Vector2f& innov_mean, Eigen::Matrix2f lm_sigma, Eigen::Matrix2f Hl, Eigen::Matrix3f Hv, Eigen::Matrix2f R)
+float Particle::calculateWeight(const Eigen::Vector2f& innov_mean, const Eigen::Matrix2f& lm_sigma, const Eigen::Matrix2f& Hl, const Eigen::Matrix<float, 2, 3>& Hv, const Eigen::Matrix2f& R)
 {
     //calculates the weight of the particle with the current landmark and observation
-    Eigen::Matrix3f L;
+    Eigen::Matrix2f L;
     L << (Hv * sigma_ * Hv.transpose()) + (Hl * lm_sigma * Hl.transpose()) + R;
     float numerator = expf(-0.5 * innov_mean.transpose() * L.inverse() * innov_mean);
-    float denominator =  sqrtf(2.0 * M_PI * L.determinant);
+    float denominator =  1 /  sqrtf(2.0 * M_PI * L.determinant());
     float weight = numerator / denominator;
     return weight;
 }
@@ -416,8 +456,8 @@ void Particle::updateLandmarkWithCholesky(Landmark& lm, const Eigen::Matrix2f& H
     Eigen::Matrix2f S((innov_cov + innov_cov.transpose()) * 0.5);
 
     //calculate the L in the A=L(L.T) cholesky decomposition and calculate its inverse 
-    Eigen::Matrix3f L(S.llt().matrixL());
-    Eigen::Matrix3f L_inv(L.inverse());
+    Eigen::Matrix2f L(S.llt().matrixL());
+    Eigen::Matrix2f L_inv(L.inverse());
 
     //update the mean and covariance of the landmark
     Eigen::Matrix2f K1(lm.sigma_ * H.transpose() * L_inv);
@@ -436,47 +476,94 @@ void Particle::updateLandmarkWithCholesky(Landmark& lm, const Eigen::Matrix2f& H
  */
 bool Particle::sameLandmark(const Landmark& lm, const std::vector<Landmark>& landmarks_to_check)
 {
-    for(const auto& lm: landmarks_to_check)
+    std::vector<Landmark>::const_iterator landmark;
+    for(landmark = landmarks_to_check.begin(); landmark != landmarks_to_check.end(); ++landmark)
     {
         //could end up checking against itself-> fix this 
-        if ((lm.colour_ == lm.colour_) && (lm.mu_ - lm.mu_).norm() <= 0.20)
+        if (((*landmark).colour_ == lm.colour_) && ((*landmark).mu_ - lm.mu_).norm() <= 0.20)
             return true;
     }
     return false;
 }
 
 /**
+ * 
+ */
+float Particle::dataAssociations(const Eigen::Matrix2f& lm_innov_cov, const Eigen::Vector2f& lm_innov_mean, const Eigen::Matrix<float, 2, 3>& Hv, const Eigen::Vector2f& zt, const perception_pkg::Cone& ob, const Landmark& lm, const Eigen::Matrix2f& R)
+{
+    //Cholesky decomposition of the covariance, which is by definition definite and symmetric
+    Eigen::Matrix3f cholesky_L = sigma_.llt().matrixL();
+
+    //uniform distribution object 
+
+    //BETWEEN 0 AND 1 OR -1 AND 1 ????
+    boost::random::uniform_real_distribution<float> distribution(0.0, 1.0);
+
+    //add sample taken from updated distribution to particle
+    boost::shared_ptr<geometry_msgs::Point> z_ptr(new geometry_msgs::Point(ob.location));
+    Eigen::Vector2f measurement(getMeasurement(z_ptr));
+    Innovation inn(computeInnovations(mu_, sigma_, lm, R));
+    Eigen::Vector2f new_innov_mean(measurement - inn.predicted_observation);
+
+    //after sampling pose from distribution, run the result to find data association value
+    double numerator = exp(-0.5 * new_innov_mean.transpose() * lm_innov_cov.inverse() * new_innov_mean);
+    double denominator = 1 / sqrtf(2 * M_PI * lm_innov_cov.determinant());
+    float p = numerator / denominator;
+    return p;
+}
+
+/**
  * @brief Generates a proposal distribution using an observation and samples a pose from it
  * @param lm_innov_cov Eigen 2x2 innovation covariance matrix of observed landmark
  * @param lm_innov_mean Eigen 2x1 innovation mean vector of observed landmark
- * @param Hv Eigen 2x2 Jaocbian matrix with respect to robot location
+ * @param Hv Eigen 2x3 Jaocbian matrix with respect to robot location
  * @param zt Eigen 2x1 measurement vector from robot pose to landmark 
  * @return Data association value
  */
-float Particle::proposalSampling(const Eigen::Matrix2f& lm_innov_cov, const Eigen::Vector2f& lm_innov_mean, Eigen::Matrix2Xf Hv, Eigen::Vector2f zt)
+void Particle::proposalSampling(const std::vector<DataAssociation> known_features, const Eigen::Matrix2f& R)
 {
-   //proposal distribution covariance and mean
-    sigma_ = (Hv.transpose() * lm_innov_cov.inverse() * Hv.transpose() + sigma_.inverse()).inverse();
-    mu_ += sigma_ * Hv.transpose() * lm_innov_cov.inverse() * zt;
+   //iterating through known features 
+    std::vector<DataAssociation>::const_iterator f;
+    for(f = known_features.begin(); f != known_features.end(); ++f)
+    {
+        //recalculate innovations after landmark update
+        Innovation new_innov = computeInnovations(mu_, sigma_, landmarks_.at(f->landmark_id), R);
+        Eigen::Vector2f new_zt(new_innov.predicted_observation);
+        Eigen::Vector2f measurement(f->measurement);
+        Eigen::Vector2f new_innov_mean(measurement - new_zt);
+        new_innov_mean(1) = angleWrap(new_innov_mean(1));
+        Eigen::Matrix2f new_innov_cov(new_innov.innovation_covariance);
+        Eigen::Matrix<float, 2, 3> new_Hv(new_innov.vehicle_jacobian);
 
+        //incrementally refine proposal distribution
+        proposalDistribution(new_innov_cov, new_innov_mean, new_Hv);
+    }
     //Cholesky decomposition of the covariance, which is by definition definite and symmetric
     Eigen::Matrix3f cholesky_L = sigma_.llt().matrixL();
 
     //uniform distribution object
-    std::uniform_real_distribution<float> distribution(-1.0, 1.0);
+    boost::random::normal_distribution<float> distribution(0.0, 1.0);
 
     //get random sample from multivariate Gaussian/normal distribution
     Eigen::Vector3f uniform_randoms(distribution(rng), distribution(rng), distribution(rng));
     Eigen::Vector3f x_sample(cholesky_L * uniform_randoms + mu_);
+    x_sample(2) = angleWrap(x_sample(2));
 
-    //add sample taken from updated distribution to particle
     mu_ = x_sample;
+}
 
-    //after sampling pose from distribution, run the result to find data association value 
-    float numerator = expf(-0.5 * lm_innov_mean.transpose() * lm_innov_cov.inverse() * lm_innov_mean);
-    float denominator = sqrtf(2 * M_PI * lm_innov_cov.determinant);
-    float p = numerator / denominator;
-    return p;
+/**
+ * @brief
+ * @param
+ * @return
+ */
+void Particle::proposalDistribution(const Eigen::Matrix2f& lm_innov_cov, const Eigen::Vector2f& lm_innov_mean, const Eigen::Matrix<float, 2, 3>& Hv)
+{
+   //proposal distribution covariance and mean
+    sigma_ = (Hv.transpose() * lm_innov_cov.inverse() * Hv + sigma_.inverse()).inverse();
+    
+    mu_ += sigma_ * Hv.transpose() * lm_innov_cov.inverse() * lm_innov_mean;
+    mu_(2) = angleWrap(mu_(2));
 }
 
 /**
@@ -490,13 +577,14 @@ void StateEstimation::resampling()
     //vector of weights
     Eigen::ArrayXf weights(num_particles_);
     int count = 0;
-    for (const auto& p: particles_) {
-        weights(count) = p.weight_;
+    std::vector<Particle>::const_iterator p;
+    for (p = particles_.begin(); p != particles_.end(); ++p) {
+        weights(count) = (*p).weight_;
         ++count;
     }
 
     //effective particle number and minimum number of particles
-    float Neff = 1.0 / (weights * weights.transpose())(0);
+    float Neff = 1.0 / (weights.pow(2).sum());
     float Nmin = num_particles_ * resampling_ratio_;
 
     //vector for new set of particles
@@ -506,7 +594,7 @@ void StateEstimation::resampling()
     Eigen::ArrayXf weights_cumulative(weights.size()), resample_base(weights.size()), resample_ids(weights.size());
 
     //uniform distribution object
-    std::uniform_real_distribution<float> distribution(0.0, 1.0);
+    boost::random::uniform_real_distribution<float> distribution(0.0, 1.0);
 
     if (Neff < Nmin)
     {
@@ -553,12 +641,18 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
     normaliseWeights();
 
     //since all weights add up to 1, add from 0 the different weighted components of the state of each particle 
-    for(const auto& p: particles_) 
+    std::vector<Particle>::const_iterator p;
+    for (p = particles_.begin(); p != particles_.end(); ++p) 
     {
-        xEst_(0) += p.weight_ * p.mu_(0);
-        xEst_(1) += p.weight_ * p.mu_(1);
-        xEst_(2) = angleWrap(xEst_(2) + p.weight_ * p.mu_(2));
+        xEst_(0) += p->weight_ * p->mu_(0);
+        xEst_(1) += p->weight_ * p->mu_(1);
+        xEst_(2) = angleWrap(xEst_(2) + p->weight_ * p->mu_(2));
     }
     return xEst_;
+}
+
+int main(int argc, char** argv)
+{
+    return 0;
 }
 

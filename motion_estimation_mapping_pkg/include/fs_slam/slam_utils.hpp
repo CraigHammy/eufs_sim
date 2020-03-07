@@ -6,8 +6,9 @@
 #include <geometry_msgs/Point.h>
 #include <perception_pkg/Cone.h>
 #include <tf/transform_listener.h>
-#include "particle.hpp"
 #include <cmath>
+#include <vector>
+#include <Eigen/Core>
 
 enum SLAM_PHASE {
     MAP_BUILDING,
@@ -35,7 +36,58 @@ struct Landmark
     std::string colour_;
 };
 
+
+struct Innovation
+{
+    Eigen::Vector2f predicted_observation;
+    Eigen::Matrix<float, 2, 3> vehicle_jacobian;
+    Eigen::Matrix2f feature_jacobian;
+    Eigen::Matrix2f innovation_covariance;
+};
+
+struct DataAssociation
+{
+    Eigen::Vector2f measurement;
+    int landmark_id;
+    std::string colour;
+};
+
+
 static const int NEW_LANDMARK_THRESH = 0.001;
+
+
+/**
+ * @brief
+ * @param
+ * @return
+ */
+Innovation computeInnovations(const Eigen::Vector3f& mean, const Eigen::Matrix3f& sigma, const Landmark& landmark, const Eigen::Matrix2f& R)
+{
+    float dx = landmark.mu_(0) - mean(0);
+    float dy = landmark.mu_(1) - mean(1);
+    float d2 = powf(dx, 2) + powf(dy, 2);
+    float d = sqrtf(d2);
+
+    //Jacobian with respect to vehicle state
+    Eigen::Matrix<float, 2, 3> Hv;
+    Hv << -dx / d, -dy / d, 0, dy / d2, -dx / d2, -1;
+
+    //Jacobian with respect to landmark state
+    Eigen::Matrix2f Hl;
+    Hl << dx / d, dy / d, -dy / d2, dx / d2;
+
+    //measurement in the form of range and bearing to landmark from robot pose
+    float theta = atan2f(dy, dx) - mean(2);
+    theta = theta - 2* M_PI * floorf((theta + M_PI) / (2 * M_PI));
+
+    Eigen::Vector2f zt;
+    zt << d, theta;
+
+    //innovation covariance of observed landmark
+    Eigen::Matrix2f lm_innov_cov(Hl * landmark.sigma_ * Hl.transpose() + R);
+    Innovation innovation = {zt, Hv, Hl, lm_innov_cov};
+    return innovation;
+}
 
 /**
  * @brief Wraps the angle between -180 and +180 in radians
@@ -55,16 +107,15 @@ float angleWrap(float angle)
 Eigen::ArrayXf cumulativeSum(Eigen::ArrayXf weights)
 {   
     Eigen::ArrayXf cumulative_weights(weights.size());
-    int count = 0;
-    for(auto a: weights)
+    for(int i = 0; i != weights.size(); ++i)
     {
-        if (count == 0)
+        if (i == 0)
         {
-            cumulative_weights(count) = a;
+            cumulative_weights(i) = weights(i);
         }
         else 
         {
-            cumulative_weights(count) = cumulative_weights(count-1) + a;
+            cumulative_weights(i) = cumulative_weights(i-1) + weights(i);
         }
     }
     return cumulative_weights;
@@ -75,7 +126,7 @@ Eigen::ArrayXf cumulativeSum(Eigen::ArrayXf weights)
  * @param sensor_reading A Point message describing a sensor reading from the Velodyne
  * @return An Eigen 2d vector describing the distance and angle to the landmark
  */
-Eigen::Vector2f getMeasurement(const geometry_msgs::Point::ConstPtr& observation, float angle)
+Eigen::Vector2f getMeasurement(const geometry_msgs::Point::ConstPtr& observation)
 {
     //get transformation from base link to velodyne sensor 
     static tf::TransformListener listener;
@@ -94,14 +145,14 @@ Eigen::Vector2f getMeasurement(const geometry_msgs::Point::ConstPtr& observation
         ros::Duration(1.0).sleep();
     }
   
-    //construct transformation matrix from Transform data 
+    //construct transformation matrix (base_link to velodyne) from Transform data 
     Eigen::Matrix3f transformation;
-    float yaw1 = transform.getRotation().z;
-    float x1 = transform.getOrigin().x;
-    float y1 = transform.getOrigin().y;
+    float yaw1 = transform.getRotation().getZ();
+    float x1 = transform.getOrigin().getX();
+    float y1 = transform.getOrigin().getY();
     transformation << cosf(yaw1), -sinf(yaw1), x1, sinf(yaw1), cosf(yaw1), y1, 0, 0, 1;
 
-    //construct transformation matrix from Point data
+    //construct transformation matrix from Point data (velodyne to cone)
     Eigen::Matrix3f cone;
     float x2 = observation->x;
     float y2 = observation->y;
@@ -112,8 +163,7 @@ Eigen::Vector2f getMeasurement(const geometry_msgs::Point::ConstPtr& observation
     Eigen::Matrix3f transformed_cone(transformation * cone);
     float final_x = transformed_cone(0, 2);
     float final_y = transformed_cone(1, 2);
-    //WHY AM I ADDING THE CURRENT ROBOT ANGLE TO IT ? EITHER MAKE IT ONLY RESPECT TO CURRENT ROBOT POSE OR MAP 
-    float final_yaw = acosf(transformed_cone(0, 0) + angle);
+    float final_yaw = acosf(transformed_cone(0, 0));
     final_yaw = angleWrap(final_yaw);
 
     //construct 2d vector made of euclidean distance and angle to landmark

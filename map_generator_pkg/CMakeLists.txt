@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(motion_estimation_mapping_pkg)
+project(map_generator_pkg)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -9,15 +9,13 @@ project(motion_estimation_mapping_pkg)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   roscpp
-  geometry_msgs
+  nav_msgs
   std_msgs
-  perception_pkg
-  tf
-  cmake_modules
+  message_generation
 )
 
 ## System dependencies are found with CMake's conventions
-find_package(Eigen3)
+# find_package(Boost REQUIRED COMPONENTS system)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -57,11 +55,12 @@ find_package(Eigen3)
 # )
 
 ## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
+add_service_files(
+  FILES
+  ConvertMap.srv
 #   Service1.srv
 #   Service2.srv
-# )
+)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -71,10 +70,11 @@ find_package(Eigen3)
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+generate_messages(
+  DEPENDENCIES
+  std_msgs  # Or other packages containing msgs
+  nav_msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -107,8 +107,8 @@ find_package(Eigen3)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES fs_slam
-#  CATKIN_DEPENDS roscpp
+#  LIBRARIES map_generator_pkg
+ CATKIN_DEPENDS roscpp
 #  DEPENDS system_lib
 )
 
@@ -119,15 +119,13 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-  include/fs_slam/
-  #include/matplotlib-cpp/
+# include
   ${catkin_INCLUDE_DIRS}
-  ${EIGEN3_INCLUDE_DIR}
 )
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/fs_slam.cpp
+#   src/${PROJECT_NAME}/map_generator_pkg.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -138,10 +136,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-#add_executable(findWayPoints src/findWayPoints.cpp)
-#add_executable(generateCostMap src/generateCostMap.cpp)
-#add_executable(coneTFBroadcaster src/coneTFBroadcaster.cpp)
-add_executable(fast_slam src/fast_slam.cpp)
+add_executable(map_converter src/map_converter.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -151,22 +146,10 @@ add_executable(fast_slam src/fast_slam.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-#add_dependencies(findWayPoints ${findWayPoints_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-#add_dependencies(generateCostMap ${generateCostMap_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-#add_dependencies(coneTFBroadcaster ${coneTFBroadcaster_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(fast_slam ${fast_slam_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(map_converter ${map_converter_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-#target_link_libraries(findWayPoints
-#  ${catkin_LIBRARIES}
-#)
-#target_link_libraries(generateCostMap
-#  ${catkin_LIBRARIES}
-#)
-#target_link_libraries(coneTFBroadcaster
-#  ${catkin_LIBRARIES}
-#)
-target_link_libraries(fast_slam
+target_link_libraries(map_converter
   ${catkin_LIBRARIES}
 )
 
@@ -210,7 +193,7 @@ target_link_libraries(fast_slam
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_fs_slam.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_map_generator_pkg.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
