@@ -1,5 +1,5 @@
 <launch>
-    <node pkg="motion_estimation_mapping_pkg" type="testingfastslam" name="slam_node" output="screen">
-        <param name="csv_map_path" value="$(find motion_estimation_mapping_pkg)/src/eufs_gazebo_tracks_small_track.csv"/>
+    <!--include file="$(find motion_estimation_mapping_pkg)/launch/track_frame_launcher.launch"/-->
+    <node pkg="motion_estimation_mapping_pkg" type="fast_slam" name="slam_node" output="screen">
     </node>
 </launch>

@@ -8,6 +8,10 @@
 #include <sensor_msgs/JointState.h>
 #include <perception_pkg/Cone.h>
 #include <vector>
+#include <eufs_msgs/WheelSpeedsStamped.h>
+#include <nav_msgs/Path.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/Pose.h>
 #include <Eigen/Core>
 #include "boost/random.hpp"
 
@@ -15,9 +19,8 @@ class StateEstimation
 {
 
 public:
-    StateEstimation(int num_particles, int num_landmarks, int update_frequency): num_particles_(num_particles), state_size_(3),
-        num_landmarks_(num_landmarks), lm_size_(2), num_particles_resampling_(num_particles / 1.5),
-        update_frequency_(update_frequency), pose_(Eigen::Vector3f::Zero()) 
+    StateEstimation(ros::NodeHandle* nh, int num_particles, int update_frequency): num_particles_(num_particles), state_size_(3),
+        lm_size_(2), num_particles_resampling_(num_particles / 1.5), update_frequency_(update_frequency), pose_(Eigen::Vector3f::Zero()), nh_(*nh)
         {
             for (int i = 0; i != num_particles; ++i)
             {
@@ -25,6 +28,8 @@ public:
                 particles_.push_back(particle);
             }
         };
+
+    ros::Time last_time_, current_time_;
 
     /**
      * @brief Initialise a StateEstimation object and the Particles objects
@@ -68,6 +73,8 @@ private:
      */
     void addNewLandmark();
 
+    void initialiseSubscribers();
+
     /**
      * @brief Normalizes the particle weights
      */
@@ -97,12 +104,20 @@ private:
      */
     void coneCallback(const perception_pkg::Cone::ConstPtr& msg);
 
+    /**
+     * @brief Callback for receiving WheelSpeeds data
+     * @param msg A WheelSpeeds message
+     */
+    void wheelSpeedCallback(const eufs_msgs::WheelSpeedsStamped::ConstPtr& msg);
+
     boost::random::mt19937 rng;
 
     //ROS variables 
     ros::NodeHandle nh_;
     ros::Subscriber odom_sub_;
     ros::Subscriber command_sub_;
+    ros::Subscriber joint_states_sub_;
+    ros::Subscriber wheel_speeds_sub_;
 
     //vehicle wheelbase
     float wheel_base_; 
@@ -112,7 +127,6 @@ private:
 
     //FastSLAM configuration parameters  
     const int num_particles_;
-    const int num_landmarks_;
     const int state_size_;
     const int lm_size_;
     const int num_particles_resampling_;
@@ -138,6 +152,13 @@ private:
     sensor_msgs::JointState joint_state_;
     bool read_state_;
     int frw_pos_, flw_pos_, brw_vel_, blw_vel_;
+
+    //visaualization paths 
+    ros::Publisher odom_path_pub_;
+    nav_msgs::Path odom_path_;
+    ros::Publisher pred_path_pub_;
+    nav_msgs::Path pred_path_;
+
     
     //FastSLAM algorithm noise 
     Eigen::Matrix2f R_; //linearized vehicle measurement noise 

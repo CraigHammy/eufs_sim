@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   perception_pkg
   tf
   cmake_modules
+  eufs_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -50,11 +51,12 @@ find_package(Eigen3)
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
+#add_message_files(
+#  FILES
+#  WheelSpeeds.msg
 #   Message1.msg
 #   Message2.msg
-# )
+#)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -71,10 +73,10 @@ find_package(Eigen3)
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+#generate_messages(
+#  DEPENDENCIES
+#  std_msgs  # Or other packages containing msgs
+#)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -108,7 +110,7 @@ find_package(Eigen3)
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES fs_slam
-#  CATKIN_DEPENDS roscpp
+  CATKIN_DEPENDS roscpp
 #  DEPENDS system_lib
 )
 
@@ -140,7 +142,7 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 #add_executable(findWayPoints src/findWayPoints.cpp)
 #add_executable(generateCostMap src/generateCostMap.cpp)
-#add_executable(coneTFBroadcaster src/coneTFBroadcaster.cpp)
+add_executable(trackFrameBroadcaster src/trackFrameBroadcaster.cpp)
 add_executable(fast_slam src/fast_slam.cpp)
 
 ## Rename C++ executable without prefix
@@ -153,7 +155,7 @@ add_executable(fast_slam src/fast_slam.cpp)
 ## same as for the library above
 #add_dependencies(findWayPoints ${findWayPoints_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 #add_dependencies(generateCostMap ${generateCostMap_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-#add_dependencies(coneTFBroadcaster ${coneTFBroadcaster_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(trackFrameBroadcaster ${trackFrameBroadcaster_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(fast_slam ${fast_slam_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
@@ -163,9 +165,9 @@ add_dependencies(fast_slam ${fast_slam_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGE
 #target_link_libraries(generateCostMap
 #  ${catkin_LIBRARIES}
 #)
-#target_link_libraries(coneTFBroadcaster
-#  ${catkin_LIBRARIES}
-#)
+target_link_libraries(trackFrameBroadcaster
+  ${catkin_LIBRARIES}
+)
 target_link_libraries(fast_slam
   ${catkin_LIBRARIES}
 )
