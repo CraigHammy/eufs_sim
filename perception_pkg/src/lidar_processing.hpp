@@ -14,6 +14,7 @@
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <perception_pkg/Cone.h>
+#include <nav_msgs/Odometry.h>
 //PCL Includes
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -54,6 +55,10 @@ class LidarProcessing{
          * @param pclCloud PCL PointCloud for output
          */
         void convertToPCL(sensor_msgs::PointCloud2ConstPtr rosCloud, PointCloud::Ptr pclCloud);
+
+
+        void odomCallback(const nav_msgs::OdometryConstPtr& msg);
+
 
         /**
          * @brief Convert from PCL Style PointCloud to ROS PointCloud2 for communication between nodes
@@ -241,9 +246,10 @@ class LidarProcessing{
 
         ros::NodeHandle nh_;
         ros::Subscriber lidar_sub_;
+        ros::Subscriber odom_sub_;
+        
         ros::Publisher cone_pub_;
 
-        
         ros::Publisher fov_trim_pub_;	
         ros::Publisher ground_plane_removal_pub_;
         ros::Publisher restored_pub_;

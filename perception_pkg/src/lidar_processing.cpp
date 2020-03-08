@@ -40,11 +40,21 @@ void LidarProcessing::initialise(){
             yellow_cone_cloud_pub_=nh_.advertise<PointCloud>("lidar_debug/yellow_cones",1);
             blue_cone_cloud_pub_=nh_.advertise<PointCloud>("lidar_debug/blue_cones",1);
         }
+
+
         
+        odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/ground_truth/odom", 1, boost::bind(&LidarProcessing::odomCallback, this, _1));
+
+
+
         initialised_=true;
     } else{
         ROS_WARN("LidarProcessing object has already been initialised, skipping call");
     }
+}
+
+void LidarProcessing::odomCallback(const nav_msgs::OdometryConstPtr& msg){
+    ROS_ERROR("RECIEVED ODOM");
 }
 
 /**
