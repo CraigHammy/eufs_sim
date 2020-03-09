@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   perception_pkg
   tf
   cmake_modules
+  actionlib_msgs
   eufs_msgs
 )
 
@@ -66,17 +67,19 @@ find_package(Eigen3)
 # )
 
 ## Generate actions in the 'action' folder
-# add_action_files(
-#   FILES
+add_action_files(
+  DIRECTORY action
+  FILES FastSlam.action
 #   Action1.action
 #   Action2.action
-# )
+)
 
 ## Generate added messages and services with any dependencies listed here
-#generate_messages(
-#  DEPENDENCIES
-#  std_msgs  # Or other packages containing msgs
-#)
+generate_messages(
+  DEPENDENCIES
+  actionlib_msgs
+  std_msgs  # Or other packages containing msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -110,7 +113,7 @@ find_package(Eigen3)
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES fs_slam
-  CATKIN_DEPENDS roscpp
+  CATKIN_DEPENDS roscpp actionlib_msgs
 #  DEPENDS system_lib
 )
 
@@ -144,6 +147,7 @@ include_directories(
 #add_executable(generateCostMap src/generateCostMap.cpp)
 add_executable(trackFrameBroadcaster src/trackFrameBroadcaster.cpp)
 add_executable(fast_slam src/fast_slam.cpp)
+add_executable(action_client src/action_client.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -157,6 +161,7 @@ add_executable(fast_slam src/fast_slam.cpp)
 #add_dependencies(generateCostMap ${generateCostMap_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(trackFrameBroadcaster ${trackFrameBroadcaster_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(fast_slam ${fast_slam_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(action_client ${action_client_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 #target_link_libraries(findWayPoints
@@ -169,6 +174,9 @@ target_link_libraries(trackFrameBroadcaster
   ${catkin_LIBRARIES}
 )
 target_link_libraries(fast_slam
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(action_client
   ${catkin_LIBRARIES}
 )
 

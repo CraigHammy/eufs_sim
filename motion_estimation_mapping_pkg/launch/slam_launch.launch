@@ -1,5 +1,5 @@
 <launch>
-    <!--include file="$(find motion_estimation_mapping_pkg)/launch/track_frame_launcher.launch"/-->
-    <node pkg="motion_estimation_mapping_pkg" type="fast_slam" name="slam_node" output="screen">
-    </node>
+    <include file="$(find motion_estimation_mapping_pkg)/launch/track_frame_launcher.launch"/>
+    <node pkg="motion_estimation_mapping_pkg" type="fast_slam" name="slam_server" output="screen"/>
+    <node pkg="motion_estimation_mapping_pkg" type="action_client" name="slam_client" output="screen"/>
 </launch>

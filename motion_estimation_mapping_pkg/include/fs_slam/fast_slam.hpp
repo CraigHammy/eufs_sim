@@ -3,6 +3,7 @@
 
 #include <Eigen/Dense>
 #include <nav_msgs/Odometry.h>
+#include "particle.hpp"
 #include "slam_utils.hpp"
 #include <ackermann_msgs/AckermannDriveStamped.h>
 #include <sensor_msgs/JointState.h>
@@ -14,20 +15,34 @@
 #include <geometry_msgs/Pose.h>
 #include <Eigen/Core>
 #include "boost/random.hpp"
+#include <actionlib/server/simple_action_server.h>
+#include <motion_estimation_mapping_pkg/FastSlamAction.h>
 
 class StateEstimation
 {
 
 public:
-    StateEstimation(ros::NodeHandle* nh, int num_particles, int update_frequency): num_particles_(num_particles), state_size_(3),
-        lm_size_(2), num_particles_resampling_(num_particles / 1.5), update_frequency_(update_frequency), pose_(Eigen::Vector3f::Zero()), nh_(*nh)
+    StateEstimation(ros::NodeHandle* nh, int num_particles, const std::string& name): num_particles_(num_particles),
+        num_particles_resampling_(num_particles / 1.5), pose_(Eigen::Vector3f::Zero()), nh_(*nh), action_name_(name),
+         as_(*nh, name, boost::bind(&StateEstimation::executeCB, this, _1), false)
         {
+            as_.start();
+
             for (int i = 0; i != num_particles; ++i)
             {
                 Particle particle;
                 particles_.push_back(particle);
             }
         };
+
+    void executeCB(const motion_estimation_mapping_pkg::FastSlamGoal::ConstPtr& goal)
+    {
+        initialise();
+        while(ros::ok())
+        {
+            prediction();
+        }
+    }
 
     ros::Time last_time_, current_time_;
 
@@ -112,6 +127,12 @@ private:
 
     boost::random::mt19937 rng;
 
+    //action server variables 
+    actionlib::SimpleActionServer<motion_estimation_mapping_pkg::FastSlamAction> as_;
+    std::string action_name_;
+    motion_estimation_mapping_pkg::FastSlamFeedback feedback_;
+    motion_estimation_mapping_pkg::FastSlamResult result_;   
+
     //ROS variables 
     ros::NodeHandle nh_;
     ros::Subscriber odom_sub_;
@@ -127,14 +148,11 @@ private:
 
     //FastSLAM configuration parameters  
     const int num_particles_;
-    const int state_size_;
-    const int lm_size_;
     const int num_particles_resampling_;
     float resampling_ratio_;
 
     //estimate variables 
     Eigen::Vector3f xEst_;
-    const int update_frequency_;
 
     //Initialise vector of particles
     std::vector<Particle> particles_;

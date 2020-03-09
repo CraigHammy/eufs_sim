@@ -22,6 +22,9 @@
 #include <stdint.h>
 #include <ctime>
 #include <fstream>
+#include <actionlib/client/simple_action_client.h>
+#include <actionlib/client/terminal_state.h>
+#include <motion_estimation_mapping_pkg/FastSlamAction.h>
 
 std::time_t now = std::time(0);
 boost::random::mt19937 rng(static_cast<uint32_t>(now));
@@ -31,6 +34,8 @@ boost::random::mt19937 rng(static_cast<uint32_t>(now));
  */
 void StateEstimation::initialise()
 {
+    //read_state_ = false;
+
     initialiseSubscribers();
 
     odom_path_pub_ = nh_.advertise<nav_msgs::Path>("odom_path", 1);
@@ -42,8 +47,6 @@ void StateEstimation::initialise()
     //control and measurement noise covariance matrix coefficients
     float sigmaV, sigmaG;
     float sigmaR, sigmaB;
-
-    read_state_ = false;
 
     //load parameters from ROS Param Server
     nh_.param("max_speed", max_speed_);
@@ -57,14 +60,15 @@ void StateEstimation::initialise()
     nh_.param("resampling_ratio_particles", resampling_ratio_, float(num_particles_ * 0.75));
 
     //get joint state values to retrieve current linear speed and steering angle of the car
-    while (!read_state_)
-        ROS_WARN("WHILE LOOP: Trying to read joint states...");
+    /*while (!read_state_)
+       ;
 
     std::vector<std::string> joint_names = joint_state_.name;
     frw_pos_ = find(joint_names.begin(), joint_names.end(), std::string("right_front_axle")) - joint_names.begin();
     flw_pos_ = find(joint_names.begin(), joint_names.end(), std::string("left_front_axle")) - joint_names.begin();
     brw_vel_ = find (joint_names.begin(),joint_names.end(), std::string("right_rear_axle")) - joint_names.begin();
     blw_vel_ = find (joint_names.begin(),joint_names.end(), std::string("left_rear_axle")) - joint_names.begin();
+    */
 
     //initialise control noise covariance matrix
     Q_ << powf(sigmaV, 2), 0, 0, powf(sigmaG, 2);
@@ -80,7 +84,7 @@ void StateEstimation::initialise()
 void StateEstimation::initialiseSubscribers()
 {
     odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/ground_truth/odom", 1, boost::bind(&StateEstimation::odomCallback, this, _1));
-    joint_states_sub_ = nh_.subscribe<sensor_msgs::JointState>("/eufs/joint_states", 1, boost::bind(&StateEstimation::jointStateCallback, this, _1));
+    //joint_states_sub_ = nh_.subscribe<sensor_msgs::JointState>("/eufs/joint_states", 1, boost::bind(&StateEstimation::jointStateCallback, this, _1));
     wheel_speeds_sub_ = nh_.subscribe<eufs_msgs::WheelSpeedsStamped>("/ros_can/wheel_speeds", 1, boost::bind(&StateEstimation::wheelSpeedCallback, this, _1));
 }
 
@@ -162,7 +166,7 @@ void StateEstimation::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
     tf2::Quaternion orientation;
     orientation.setRPY(0, 0, pose_(2));
 
-    current_pose.header.frame_id = "odom";
+    current_pose.header.frame_id = "track";
     current_pose.header.stamp = ros::Time::now();
     
     odom_path_.header = current_pose.header;
@@ -291,12 +295,14 @@ void StateEstimation::prediction()
         tf2::Quaternion orientation;
         orientation.setRPY(0, 0, p->mu_(2));
 
-        current_pose.header.frame_id = "odom";
+        current_pose.header.frame_id = "track";
         current_pose.header.stamp = ros::Time::now();
         
         pred_path_.header = current_pose.header;
         pred_path_.poses.push_back(current_pose);
+        ROS_INFO("hello1");
         pred_path_pub_.publish(pred_path_);
+        ROS_INFO("hello2");
     }
 }
 
@@ -728,16 +734,10 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
 
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "slam_node");
+    ros::init(argc, argv, "slam_server");
     ros::NodeHandle nh;
-    StateEstimation slam(&nh, 1, 2);
-    slam.initialise();
+    StateEstimation action_server(&nh, 1, "fastslam");
+    ros::spin();
 
-    /*int count = 0;
-    while(nh.ok())
-    {
-        slam.prediction();
-    }*/
-    ros::spinOnce();
     return 0;
 }
