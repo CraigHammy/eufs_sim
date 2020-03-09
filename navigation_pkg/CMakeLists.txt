@@ -7,6 +7,11 @@ project(navigation_pkg)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
+##
+## THE RIGHT DEPENDENCIES FOR TEB LOCAL PLANNER ARE:
+## for nav: move_base my_tf_configuration_dep my_odom_configuration_dep my_sensor_configuration_dep
+## for goals: move_base_msgs actionlib roscpp
+
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   actionlib
@@ -208,9 +213,10 @@ include_directories(
 # catkin_add_nosetests(test)
 
 add_executable(mapping_lap src/mapping_lap.cpp)
+add_executable(cmd_vel_to_ackermann_drive src/cmd_vel_to_ackermann_drive.py)
 
 add_dependencies(mapping_lap ${mapping_lap_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(cmd_vel_to_ackermann_drive ${cmd_vel_to_ackermann_drive_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-target_link_libraries(mapping_lap 
-  ${catkin_LIBRARIES}
-)
+target_link_libraries(mapping_lap ${catkin_LIBRARIES})
+target_link_libraries(cmd_vel_to_ackermann_drive ${catkin_LIBRARIES})

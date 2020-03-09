@@ -6,19 +6,20 @@
 typedef actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> MoveBaseClient;
 
 int main(int argc, char** argv){
-  ros::init(argc, argv, "simple_navigation_goals");
+  ros::init(argc, argv, "mapping_lap");
 
-  //tell the action client that we want to spin a thread by default
+  //Tell the action client that we want to spin a thread by default
   MoveBaseClient ac("move_base", true);
 
-  //wait for the action server to come up
+  //Wait for the action server to come up
   while(!ac.waitForServer(ros::Duration(5.0))){
     ROS_INFO("Waiting for the move_base action server to come up");
   }
 
+  //Init goal var
   move_base_msgs::MoveBaseGoal goal;
 
-  //we'll send a goal to the robot to move 1 meter forward
+  //Send a goal to the robot to move 1 meter forward <- next step is to move between cones / gitlab version has ground truth to check them
   goal.target_pose.header.frame_id = "base_link";
   goal.target_pose.header.stamp = ros::Time::now();
 
