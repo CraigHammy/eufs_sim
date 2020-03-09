@@ -10,6 +10,10 @@
 - Install Ubuntu 16.04 LTS
 - Install [ros-kinetic-desktop-full](http://wiki.ros.org/kinetic/Installation)
 - Install [catkin tools](https://catkin-tools.readthedocs.io/en/latest/installing.html)
+- Download repo using
+```bash 
+git clone --recursive URL
+```
 - Install ROS dependencies by navigating to the catkin workspace and doing
 ```bash
 rosdep install -i --from-path src/
