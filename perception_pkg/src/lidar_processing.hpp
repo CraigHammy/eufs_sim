@@ -56,10 +56,6 @@ class LidarProcessing{
          */
         void convertToPCL(sensor_msgs::PointCloud2ConstPtr rosCloud, PointCloud::Ptr pclCloud);
 
-
-        void odomCallback(const nav_msgs::OdometryConstPtr& msg);
-
-
         /**
          * @brief Convert from PCL Style PointCloud to ROS PointCloud2 for communication between nodes
          * @param pclCloud PointCloud in PCL Format
@@ -246,7 +242,6 @@ class LidarProcessing{
 
         ros::NodeHandle nh_;
         ros::Subscriber lidar_sub_;
-        ros::Subscriber odom_sub_;
         
         ros::Publisher cone_pub_;
 
