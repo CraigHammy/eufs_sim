@@ -1,0 +1,32 @@
+<launch>
+<master auto="start"/>
+
+<!-- Run the map server --> 
+<arg name="map_file" default="$(find navigation_pkg)/maps/map.yaml"/>
+<node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
+    <param name="frame_id" value="odom" />
+
+<!--- Run AMCL --> 
+    <include file="$(find navigation_pkg)/launch/amcl.launch" />
+
+   <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
+    <rosparam file="$(find navigation_pkg)/params/costmap_common_params.yaml" command="load" ns="global_costmap" /> 
+    <rosparam file="$(find navigation_pkg)/params/costmap_common_params.yaml" command="load" ns="local_costmap" />
+    <rosparam file="$(find navigation_pkg)/params/global_costmap_params.yaml" command="load" /> 
+    <rosparam file="$(find navigation_pkg)/params/local_costmap_params.yaml" command="load" />
+    <rosparam file="$(find navigation_pkg)/params/base_local_planner_params.yaml" command="load" />
+    <rosparam file="$(find navigation_pkg)/params/move_base_params.yaml" command="load" />
+
+   
+    <param name="base_local_planner" value="base_local_planner/TrajectoryPlannerROS"/> 
+<!--    
+    <rosparam file="$(find navigation_pkg)/params/base_local_planner_params.yaml" command="load" />
+        <param name="base_global_planner" type="string" value="navfn/NavfnROS" />
+    <rosparam file="$(find navigation_pkg)/params/move_base_params.yaml" command="load" />
+    
+    
+-->
+    <remap from="scan" to="laserscan"/>
+ </node>
+
+</launch> 

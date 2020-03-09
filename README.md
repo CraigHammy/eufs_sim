@@ -1,59 +1,68 @@
-# Heriot Watt Masters Group 1 Project
+# EUFS Autonomous Simulation
 
-## 1. Contents of Repository
-- [eufs_sim](https://gitlab.com/eufs/eufs_sim)
-- [eufs_messages](https://gitlab.com/eufs/eufs_msgs)
-- [darknet_ros](https://github.com/leggedrobotics/darknet_ros)
-- fs_ai
+ROS/Gazebo simulation packages for driverless FSAE vehicles.
 
-## 2. Install Prerequisites 
-- Install Ubuntu 16.04 LTS
-- Install [ros-kinetic-desktop-full](http://wiki.ros.org/kinetic/Installation)
-- Install [catkin tools](https://catkin-tools.readthedocs.io/en/latest/installing.html)
-- Install ROS dependencies by navigating to the catkin workspace and doing
-```bash
-rosdep install -i --from-path src/
+![simulation](https://eufs.eusa.ed.ac.uk/wp-content/uploads/2018/05/eufsa-sim.jpg)
+
+### Contents
+1. [Install Prerequisites](#requirements)
+2. [Compiling and running](#compiling)
+3. [Sensors](#sensors)
+
+## Setup Instructions
+### 1. Install Prerequisites <a name="requirements"></a>
+##### - Install Ubuntu 16.04 LTS
+##### - Install [ros-kinetic-desktop-full](http://wiki.ros.org/kinetic/Installation)
+##### - Install ROS packages:
+* ros-kinetic-ackermann-msgs
+* ros-kinetic-twist-mux
+* ros-kinetic-joy
+* ros-kinetic-controller-manager
+* ros-kinetic-robotnik-msgs
+* ros-kinetic-velodyne-simulator
+* ros-kinetic-effort-controllers
+* ros-kinetic-velocity-controllers
+* ros-kinetic-joint-state-controller
+* ros-kinetic-gazebo-ros-control
+* ros-kinetic-perception-pcl
+
+Or if you are lazy like my here's a one-liner
 ```
-- Install Python dependencies:
-```bash
-pip install -r eufs_gazebo/requirements.txt
-```
-- Install Masters Project Dependencies
-```bash
-sudo apt-get install ros-kinetic-perception-pcl
+sudo apt-get install ros-kinetic-ackermann-msgs ros-kinetic-twist-mux ros-kinetic-joy ros-kinetic-controller-manager ros-kinetic-robotnik-msgs ros-kinetic-velodyne-simulator ros-kinetic-effort-controllers ros-kinetic-velocity-controllers ros-kinetic-joint-state-controller ros-kinetic-gazebo-ros-control ros-kinetic-robotnik-msgs ros-kinetic-perception-pcl
 ```
 
-## 3. Compiling 
+
+### 2. Compiling and running <a name="compiling"></a>
+
+Create a workspace for the simulation if you don't have one:
+```mkdir -p ~/ros/eufs_ws/src```
+Copy the contents of this repository to the `src` folder you just created.
 
 Navigate to your workspace and build the simulation:
 ```
-cd [your-catkin-workspace]
-catkin build
+cd ~/ros/eufs_ws
+catkin_make
 ```
-(add -DCMAKE_BUILD_TYPE=Release for packages such as darknet)
+_Note:_ You can use `catkin build` instead of `catkin_make` if you know what you are doing.
 
-To enable ROS to find the packages you also need to run
-```
-source ./devel/setup.bash
-```
-
+To enable ROS to find the EUFS packages you also need to run
+```source /devel/setup.bash```
 _Note:_ source needs to be run on each new terminal you open. You can also include it in your `.bashrc` file.
 
-## 4. Additional sensors
+Now you can finally run our kickass simulation!!
+```roslaunch eufs_gazebo small_track.launch```
+
+An easy way to control the car is via
+```roslaunch robot_control rqt_robot_control.launch```
+
+### 3. Additional sensors <a name="sensors"></a>
 Additional sensors for testing are avilable via the `ros-kinetic-robotnik-sensor` package. Some of them are already defined in `eufs_description/robots/eufs.urdf.xarco`. You can simply commment them in and attach them appropriately to the car.
 
 
 **Sensor suit of the car by default:**
 
-- VLP16 lidar
-- ZED Stereo camera
-- IMU
-- GPS
-- odometry
-
-An easy way to control the car is via
-```
-roslaunch ros_can_sim rqt_ros_can_sim.launch
-```
-
-(Make sure to modify the twist to ackerman package to publish to topic /cmd_vel_out)
+* VLP16 lidar
+* ZED Stereo camera
+* IMU
+* GPS
+* odometry
