@@ -14,7 +14,7 @@ import os
 
 # Instantiate CvBridge
 bridge = CvBridge()
-image_folder_path = '/home/craig/catkin_ws/src/eufs_sim/perception_pkg/camera_data/right_camera_saved'
+image_folder_path = '/home/craig/ros_space/masters_catkin/src/eufs_sim/fs_ai/yolo_files/darknet_ros/darknet/custom_data/images'
 
 def image_callback(msg):
     print("Received an image!")
