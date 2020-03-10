@@ -27,6 +27,8 @@ pip install -r eufs_gazebo/requirements.txt
 sudo apt-get install ros-kinetic-perception-pcl
 ```
 
+- (Optional but highly recommended) install [CUDA 9.0](https://developer.nvidia.com/cuda-90-download-archive?target_os=Linux&target_arch=x86_64&target_distro=Ubuntu&target_version=1604&target_type=runfilelocal)
+
 ## 3. Compiling 
 
 Navigate to your workspace and build the simulation:
