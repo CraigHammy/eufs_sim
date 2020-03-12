@@ -401,11 +401,9 @@ void StateEstimation::correction(SLAM_PHASE slam_phase)
         std::vector<DataAssociation>::const_iterator u;
         for (u = p->unknown_features_.begin(); u != p->unknown_features_.end(); ++u)
         {
-            ROS_INFO("hello1");
             //add new landmark to landmark vector and to landmark cloud for visualization
             Eigen::Vector2f lm_xy;
             lm_xy = p->addNewLandmark(u->measurement, u->colour, R_);
-            ROS_INFO("hello2");
             geometry_msgs::Point32 lm_point;
             lm_point.x = lm_xy(0);
             lm_point.y = lm_xy(1);
@@ -416,8 +414,7 @@ void StateEstimation::correction(SLAM_PHASE slam_phase)
 
             sensor_msgs::PointCloud2 cloud;
             //sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
-            landmark_cloud_pub_.publish(landmark_cloud_);
-            ROS_INFO("hello3");
+            //landmark_cloud_pub_.publish(landmark_cloud_);
         }
         p->unknown_features_.clear();
     }
