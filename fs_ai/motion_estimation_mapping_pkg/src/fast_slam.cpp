@@ -25,6 +25,7 @@
 #include <actionlib/client/simple_action_client.h>
 #include <actionlib/client/terminal_state.h>
 #include <motion_estimation_mapping_pkg/FastSlamAction.h>
+#include <geometry_msgs/PoseArray.h>
 
 std::time_t now = std::time(0);
 boost::random::mt19937 rng(static_cast<uint32_t>(now));
@@ -35,11 +36,13 @@ boost::random::mt19937 rng(static_cast<uint32_t>(now));
 void StateEstimation::initialise()
 {
     //read_state_ = false;
+    start_ = false;
 
     initialiseSubscribers();
 
     odom_path_pub_ = nh_.advertise<nav_msgs::Path>("odom_path", 1);
     pred_path_pub_ = nh_.advertise<nav_msgs::Path>("prediction_path", 1);
+    slam_path_pub_ = nh_.advertise<nav_msgs::Path>("slam_path", 1);
 
     current_time_ = ros::Time::now();
     last_time_ = current_time_;
@@ -49,10 +52,10 @@ void StateEstimation::initialise()
     float sigmaR, sigmaB;
 
     //load parameters from ROS Param Server
-    nh_.param("max_speed", max_speed_);
-    nh_.param("max_steering", max_steering_);
-    nh_.param("wheel_base", wheel_base_);
-    nh_.param("wheel_diameter", wheel_diameter_);
+    private_nh_.getParam("max_speed", max_speed_);
+    private_nh_.getParam("max_steering", max_steering_);
+    private_nh_.getParam("wheel_base", wheel_base_);
+    private_nh_.getParam("wheel_diameter", wheel_diameter_);
     nh_.param("control_noise_velocity", sigmaV, float(1.0));
     nh_.param("control_noise_steering_angle", sigmaG, float(2.5 * M_PI / 180));
     nh_.param("measurement_noise_euclidean_distance", sigmaR, float(0.5));
@@ -86,24 +89,25 @@ void StateEstimation::initialiseSubscribers()
     odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/ground_truth/odom", 1, boost::bind(&StateEstimation::odomCallback, this, _1));
     //joint_states_sub_ = nh_.subscribe<sensor_msgs::JointState>("/eufs/joint_states", 1, boost::bind(&StateEstimation::jointStateCallback, this, _1));
     wheel_speeds_sub_ = nh_.subscribe<eufs_msgs::WheelSpeedsStamped>("/ros_can/wheel_speeds", 1, boost::bind(&StateEstimation::wheelSpeedCallback, this, _1));
-}
-
+    //command_sub_ = nh_.subscribe<ackermann_msgs::AckermannDriveStamped>("/cmd_vel_out", 1, boost::bind(&StateEstimation::commandCallback, this, _1));
+    cone_sub_ = nh_.subscribe<perception_pkg::Cone>("/cones", 1, boost::bind(&StateEstimation::coneCallback, this, _1));
+}   
 /**
  * @brief Runs the FastSLAM2.0 algorithm
  * @param observations List of Cone messages
  */
-void StateEstimation::FastSLAM2(const std::vector<perception_pkg::Cone>& observations)
+void StateEstimation::FastSLAM2()
 {
     while(1)
     {
         prediction();
         if (!lap_closure_detected_)
         {
-            correction(observations, MAP_BUILDING);
+            correction(MAP_BUILDING);
         }
         else
         {
-            correction(observations, LOCALIZATION);
+            correction(LOCALIZATION);
         }
         calculateFinalEstimate();
     }
@@ -140,11 +144,18 @@ void StateEstimation::normaliseWeights()
  */
 void StateEstimation::wheelSpeedCallback(const eufs_msgs::WheelSpeedsStamped::ConstPtr& msg)
 {
-    ROS_ERROR("wheel speeds received");
-    float rpm = msg->rb_speed; 
+    //ROS_ERROR("wheel speeds received");
+    float rpm_r = msg->rb_speed; 
+    float rpm_l = msg->lb_speed;
     //transform from RPM to m/s
-    u_.speed = 2 * M_PI * (wheel_diameter_/2) * rpm / 60;
+    float right = 2 * M_PI * (wheel_diameter_/2) * rpm_r / 60;
+    float left = 2 * M_PI * (wheel_diameter_/2) * rpm_l / 60;
+    u_.speed = (right + left ) / 2.0;
     u_.steering_angle = msg->steering;
+    start_ = true;
+
+    //ROS_WARN("rpm : %f, wheel diameter: %f", msg->rb_speed, wheel_diameter_);
+    //ROS_WARN("linear speed : %f, steering angle: %f", u_.speed, u_.steering_angle);
 }
 
 /**
@@ -154,7 +165,7 @@ void StateEstimation::wheelSpeedCallback(const eufs_msgs::WheelSpeedsStamped::Co
 void StateEstimation::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
     //odometry pose
-    ROS_ERROR("odometry received");
+    //ROS_ERROR("odometry received");
     pose_(0) = msg->pose.pose.position.x;
     pose_(1) = msg->pose.pose.position.y;
     pose_(2) = msg->pose.pose.orientation.z;
@@ -181,8 +192,9 @@ void StateEstimation::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 void StateEstimation::commandCallback(const ackermann_msgs::AckermannDriveStamped::ConstPtr& msg)
 {
     //motion commands
-    u_.speed = msg->drive.speed;
-    u_.steering_angle = msg->drive.steering_angle;
+    //u_.speed = msg->drive.speed;
+    //u_.steering_angle = msg->drive.steering_angle;
+   // ROS_WARN("linear speed : %f, steering angle: %f", u_.speed, u_.steering_angle);
 }
 
 /**
@@ -192,7 +204,7 @@ void StateEstimation::commandCallback(const ackermann_msgs::AckermannDriveStampe
 void StateEstimation::jointStateCallback(const sensor_msgs::JointState::ConstPtr& msg)
 {
     //joint states values
-    ROS_ERROR("CALLBACK: Joint states published.");
+    //ROS_ERROR("CALLBACK: Joint states published.");
     joint_state_ = *msg;
     read_state_ = true;
 }
@@ -205,6 +217,8 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
 {
     if (msg->colour.compare("orange") && sqrtf(powf(msg->location.x, 2) + powf(msg->location.y, 2)) < 1.0)
         lap_closure_detected_ = true;
+    input_data_.push_back(*msg);
+    ROS_INFO("cone published");
 }
 
 /**
@@ -221,14 +235,14 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
 void Particle::motionUpdate(const Eigen::Vector3f& current_pose, float speed, float steer, float wb, float delta, const Eigen::Matrix3f& Gx, const Eigen::Matrix<float, 3, 2>& Gu, const Eigen::Matrix2f& Q)
 {
     //calculate the difference from the last known pose
-    float delta_x = speed * cosf(current_pose(2) + steer) * delta;
-    float delta_y = speed * sinf(current_pose(2) + steer) * delta;
+    float delta_x = speed * cosf(current_pose(2)) * delta;
+    float delta_y = speed * sinf(current_pose(2)) * delta;
     float delta_th = (speed * delta * tanf(steer)) / wb;
 
     //predict the particle mean
     mu_(0) += delta_x;
     mu_(1) += delta_y;
-    mu_(2) = angleWrap(mu_(2) + delta_th);
+    mu_(2) += delta_th;
 
     //predict the particle covariance
     sigma_ = Gx * sigma_ * Gx.transpose() + Gu * Q * Gu.transpose();
@@ -239,6 +253,7 @@ void Particle::motionUpdate(const Eigen::Vector3f& current_pose, float speed, fl
  */
 void StateEstimation::prediction()
 {
+    ROS_WARN("prediction");
     //current robot steering angle from joint state values
     /*float steering_angle = (joint_state_.position[frw_pos_] + joint_state_.position[flw_pos_]) / 2.0;
 
@@ -263,46 +278,53 @@ void StateEstimation::prediction()
     */
    float steering_angle = u_.steering_angle;
    float speed = u_.speed;
+   if (speed > max_speed_) speed = max_speed_;
+   if (speed < -max_speed_) speed = -max_speed_;
+   if (steering_angle > max_steering_) steering_angle = max_steering_;
+   if (steering_angle < -max_steering_) steering_angle = -max_steering_;
 
     //timestep
     //float dt = 1.0 / update_frequency_;
     current_time_ = ros::Time::now();
     float dt = current_time_.toSec() - last_time_.toSec();
+    //ROS_WARN("dt: %f", dt);
     last_time_ = current_time_;
-
-    //current yaw pose
-    float current_yaw = pose_(2);
-
-    //Jacobian with respect to location
-    Eigen::Matrix3f Gx;
-    Gx << 1, 0, -speed * dt * sinf(steering_angle + current_yaw),
-        0, 1, speed * dt * cosf(steering_angle + current_yaw), 0, 0, 1;
-
-    //Jacobian with respect to control
-    Eigen::Matrix<float, 3, 2> Gu;
-    Gu << dt * cosf(steering_angle + current_yaw), -speed * dt * sinf(steering_angle + current_yaw),
-        dt * sinf(steering_angle + current_yaw), speed * dt * cosf(steering_angle + current_yaw),
-        dt * tanf(steering_angle) / wheel_base_, speed * dt / (pow(cosf(steering_angle), 2) * wheel_base_);
 
     std::vector<Particle>::iterator p;
     for (p = particles_.begin(); p != particles_.end(); ++p)
     {
-        p->motionUpdate(pose_, speed, steering_angle, wheel_base_, dt, Gx, Gu, Q_);
-        geometry_msgs::PoseStamped current_pose;
+        //current yaw pose
+        float current_yaw = p->mu_(2);
+
+        //Jacobian with respect to location
+        Eigen::Matrix3f Gx;
+        Gx << 1, 0, -speed * dt * sinf(current_yaw),
+            0, 1, speed * dt * cosf(current_yaw), 0, 0, 1;
+
+        //Jacobian with respect to control
+        Eigen::Matrix<float, 3, 2> Gu;
+        Gu << dt * cosf(current_yaw), -speed * dt * sinf(current_yaw),
+            dt * sinf(current_yaw), speed * dt * cosf(current_yaw),
+            dt * tanf(steering_angle) / wheel_base_, speed * dt / (pow(cosf(steering_angle), 2) * wheel_base_);
+
+        p->motionUpdate(p->mu_, speed, steering_angle, wheel_base_, dt, Gx, Gu, Q_);
+
+        /*geometry_msgs::PoseStamped current_pose;
         current_pose.pose.position.x = p->mu_(0);
         current_pose.pose.position.y = p->mu_(1);
-        current_pose.pose.position.z = 0;
-        tf2::Quaternion orientation;
-        orientation.setRPY(0, 0, p->mu_(2));
+        current_pose.pose.position.z = 0.0;
+        geometry_msgs::Quaternion orientation = tf::createQuaternionMsgFromYaw(p->mu_(2));
+        current_pose.pose.orientation = orientation;
+        //ROS_WARN("x: %f, y: %f, yaw: %f", p->mu_(0), p->mu_(1), p->mu_(2));
 
         current_pose.header.frame_id = "track";
         current_pose.header.stamp = ros::Time::now();
         
         pred_path_.header = current_pose.header;
         pred_path_.poses.push_back(current_pose);
-        ROS_INFO("hello1");
-        pred_path_pub_.publish(pred_path_);
-        ROS_INFO("hello2");
+        //ROS_INFO("hello1");
+        pred_path_pub_.publish(pred_path_);*/
+        //ROS_INFO("hello2");
     }
 }
 
@@ -311,25 +333,33 @@ void StateEstimation::prediction()
  * @param observations A list of Cone messages
  * @param slam_phase The phase (mapping or localization) the car is currently executing
  */
-void StateEstimation::correction(const std::vector<perception_pkg::Cone>& observations, SLAM_PHASE slam_phase)
+void StateEstimation::correction(SLAM_PHASE slam_phase)
 {
+    ROS_WARN("correction");
     std::vector<Particle>::iterator p;
-    std::vector<perception_pkg::Cone>::const_iterator z;
+    std::deque<perception_pkg::Cone>::const_iterator z;
+    std::deque<perception_pkg::Cone> observations(input_data_.begin(), input_data_.end());
+    int input_size = observations.size();
 
-    int obsnum = 1;
     for(z = observations.begin(); z != observations.end(); ++z)
     {
         for (p = particles_.begin(); p != particles_.end(); ++p)
         {
             //unknwon data association
             p->measurementUpdate(*z, pose_, R_, Q_, slam_phase);
-            if ((p->unknown_features_.size() + p->landmarks_.size()) > 6)
+            if ((p->unknown_features_.size() + p->landmarks_.size()) > 70)
             {
                 ROS_ERROR("error");
                 //exit(0);
             }
         }
     }
+    ROS_INFO("data associations done");
+    for(int i = 0; i != input_size; ++i)
+    {
+        input_data_.pop_front();
+    }
+
 
     for (p = particles_.begin(); p != particles_.end(); ++p)
     {
@@ -364,7 +394,16 @@ void StateEstimation::correction(const std::vector<perception_pkg::Cone>& observ
         std::vector<DataAssociation>::const_iterator u;
         for (u = p->unknown_features_.begin(); u != p->unknown_features_.end(); ++u)
         {
-            p->addNewLandmark(u->measurement, u->colour, R_);
+            //add new landmark to landmark vector and to landmark cloud for visualization
+            Eigen::Vector2f lm_xy;
+            lm_xy = p->addNewLandmark(u->measurement, u->colour, R_);
+            geometry_msgs::Pose lm_pose;
+            lm_pose.position.x = lm_xy(0);
+            lm_pose.position.y = lm_xy(1);
+            lm_pose.position.z = 0.0;
+            geometry_msgs::Quaternion orientation = tf::createQuaternionMsgFromYaw(lm_xy(2));
+            lm_pose.orientation = orientation;
+            landmark_cloud_.poses.push_back(lm_pose);
         }
         p->unknown_features_.clear();
     }
@@ -381,6 +420,8 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
 
     boost::shared_ptr<geometry_msgs::Point> z_ptr(new geometry_msgs::Point((z).location));
     Eigen::Vector2f measurement(getMeasurement(z_ptr));
+
+    ROS_WARN("ciao1");
 
     //add some noise to the range observations
     boost::random::uniform_real_distribution<float> distribution(0.0, 1.0);
@@ -405,6 +446,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
     std::vector<Landmark>::const_iterator lm;
     for(lm = landmarks_.begin(); lm != landmarks_.end(); ++lm, ++i)
     {
+        ROS_WARN("ciao2");
         Innovation innovation(computeInnovations(mu_, sigma_, *lm, R));
         Eigen::Matrix<float, 2, 3> Hv(innovation.vehicle_jacobian);
         Eigen::Matrix2f Hl(innovation.feature_jacobian);
@@ -416,6 +458,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
 
         //perform data association to distinguish new features, and assigning correct observations to known features
         float p = dataAssociations(lm_innov_cov, lm_innov_mean, Hv, zt, z, *lm, R);
+        ROS_WARN("ciao3");
 
         if ((i == 0) || (p > best_p))
         {
@@ -430,6 +473,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
     Eigen::Vector2f map_feature(z.location.x + mu_(0), z.location.y + mu_(1));
     if ((best_p < 0.00001) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.5))
     {
+        ROS_WARN("ciao4");
         DataAssociation d;
         d.measurement = measurement;
         d.landmark_id = best_arg;
@@ -437,6 +481,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
     }
     else
     {
+        ROS_WARN("ciao5");
         DataAssociation d;
         d.measurement = measurement;
         d.landmark_id = best_arg;
@@ -449,6 +494,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
     else if (slam_phase == LOCALIZATION) {
         ;//do stuff
     }
+    ROS_WARN("fine");
 }
 
 /**
@@ -457,7 +503,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
  * @param colour The colour of the cone landmark
  * @param R Eigen 2x2 covariance matrix of measurement noise
  */
-void Particle::addNewLandmark(const Eigen::Vector2f& ob, const std::string& colour, const Eigen::Matrix2f& R)
+Eigen::Vector2f Particle::addNewLandmark(const Eigen::Vector2f& ob, const std::string& colour, const Eigen::Matrix2f& R)
 {
     Landmark landmark;
     //sine and cosine of yaw angle
@@ -482,6 +528,8 @@ void Particle::addNewLandmark(const Eigen::Vector2f& ob, const std::string& colo
     //add landmark to particle landmark list
     if (landmarks_.size() < num_lms)
         landmarks_.push_back(landmark);
+
+    return landmark.mu_;
 }
 
 /**
@@ -627,7 +675,7 @@ void Particle::proposalSampling(const std::vector<DataAssociation> known_feature
 
     //get random sample from multivariate Gaussian/normal distribution
     Eigen::Vector3f uniform_randoms(distribution(rng), distribution(rng), distribution(rng));
-    Eigen::Vector3f x_sample(cholesky_L * uniform_randoms + mu_);
+    Eigen::Vector3f x_sample(cholesky_L * uniform_randoms * 0.1 + mu_);
     x_sample(2) = angleWrap(x_sample(2));
 
     mu_ = x_sample;
@@ -652,6 +700,7 @@ void Particle::proposalDistribution(const Eigen::Matrix2f& lm_innov_cov, const E
  */
 void StateEstimation::resampling()
 {
+    ROS_WARN("resampling");
     //normalize weights
     normaliseWeights();
 
@@ -663,7 +712,7 @@ void StateEstimation::resampling()
         weights(count) = (*p).weight_;
         ++count;
     }
-
+    ROS_WARN("hello1");
     //effective particle number and minimum number of particles
     float Neff = 1.0 / (weights.pow(2).sum());
     float Nmin = num_particles_ * resampling_ratio_;
@@ -679,6 +728,7 @@ void StateEstimation::resampling()
 
     if (Neff < Nmin)
     {
+        ROS_WARN("hello2");
         weights_cumulative << cumulativeSum(weights);
         //cumulative vector from 0 to [1 - (1 / NPARTICLES)] in steps of 1 / NPARTICLES
         resample_base << cumulativeSum(weights * 0.0 + 1 / num_particles_) - 1 / num_particles_;
@@ -689,6 +739,7 @@ void StateEstimation::resampling()
         Eigen::VectorXd indexes(weights.size());
         for (int i = 0; i != num_particles_; ++i)
         {
+            ROS_WARN("hello3");
             //see where each resample random number fits in the cumulative sum bins
             while ((count <= weights_cumulative.size() - 1) && (resample_ids(count) < weights_cumulative(i)))
                 //if current random number is below a cumulative sum block, add the index of the weight block
@@ -697,11 +748,12 @@ void StateEstimation::resampling()
                 indexes(i) = count;
                 ++count;
         }
-
+        ROS_WARN("hello4");
         //update particles with resampled particles
         std::vector<Particle> particles_copy(particles_);
         for (int i = 0; i != indexes.size(); ++i)
         {
+            ROS_WARN("hello5");
             particles_.at(i).mu_ = particles_copy.at(indexes(i)).mu_;
             particles_.at(i).sigma_ = particles_copy.at(indexes(i)).sigma_;
             particles_.at(i).landmarks_ = particles_copy.at(indexes(i)).landmarks_;
@@ -718,6 +770,7 @@ void StateEstimation::resampling()
 Eigen::Vector3f StateEstimation::calculateFinalEstimate()
 {
     //set SLAM estimate to zero and normalise all particle weights
+    ROS_WARN("final estimate");
     xEst_ = Eigen::Vector3f::Zero();
     normaliseWeights();
 
@@ -729,6 +782,19 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
         xEst_(1) += p->weight_ * p->mu_(1);
         xEst_(2) = angleWrap(xEst_(2) + p->weight_ * p->mu_(2));
     }
+
+    geometry_msgs::PoseStamped current_pose;
+    current_pose.pose.position.x = xEst_(0);
+    current_pose.pose.position.y = xEst_(1);
+    current_pose.pose.position.z = 0.0;
+    geometry_msgs::Quaternion orientation = tf::createQuaternionMsgFromYaw(xEst_(2));
+    current_pose.pose.orientation = orientation;
+    current_pose.header.frame_id = "track";
+    current_pose.header.stamp = ros::Time::now();
+    slam_path_.header = current_pose.header;
+    slam_path_.poses.push_back(current_pose);
+    slam_path_pub_.publish(slam_path_);
+
     return xEst_;
 }
 
@@ -736,7 +802,7 @@ int main(int argc, char** argv)
 {
     ros::init(argc, argv, "slam_server");
     ros::NodeHandle nh;
-    StateEstimation action_server(&nh, 1, "fastslam");
+    StateEstimation action_server(&nh, 10, "fastslam");
     ros::spin();
 
     return 0;

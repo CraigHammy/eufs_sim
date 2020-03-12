@@ -74,7 +74,7 @@ public:
      * @param colour The colour of the cone landmark 
      * @param R Eigen 2x2 covariance matrix of measurement noise
      */
-    void addNewLandmark(const Eigen::Vector2f& ob, const std::string& colour, const Eigen::Matrix2f& R);
+    Eigen::Vector2f addNewLandmark(const Eigen::Vector2f& ob, const std::string& colour, const Eigen::Matrix2f& R);
 
     //these should be private-> try working with friend classes and method (protected section??)
     float weight_;      

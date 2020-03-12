@@ -133,12 +133,13 @@ Eigen::Vector2f getMeasurement(const geometry_msgs::Point::ConstPtr& observation
     tf::StampedTransform transform;
 
     //create expected link  
-    std::string velodyne_link = "/velodyne";
+    std::string velodyne_link = "velodyne";
     
     //block until transform becomes available or until timeout has been reached 
     ros::Time now = ros::Time::now();
     try{
-      listener.lookupTransform("/base_link", velodyne_link, now, transform);
+        listener.waitForTransform("base_footprint", velodyne_link, now, ros::Duration(3.0));
+        listener.lookupTransform("base_footprint", velodyne_link, now, transform);
     }
     catch (tf::TransformException e){
         ROS_ERROR("%s", e.what());

@@ -1,5 +1,12 @@
 <launch>
     <include file="$(find motion_estimation_mapping_pkg)/launch/track_frame_launcher.launch"/>
-    <node pkg="motion_estimation_mapping_pkg" type="fast_slam" name="slam_server" output="screen"/>
+
+    <node pkg="motion_estimation_mapping_pkg" type="fast_slam" name="slam_server" output="screen">
+        <param name="max_speed" type="double" value="20.0"/>
+        <param name="max_steering" type="double" value="0.523599"/>
+        <param name="wheel_base" type="double" value="1.53"/>
+        <param name="wheel_diameter" type="double" value="0.505"/>
+    </node>
+
     <node pkg="motion_estimation_mapping_pkg" type="action_client" name="slam_client" output="screen"/>
 </launch>

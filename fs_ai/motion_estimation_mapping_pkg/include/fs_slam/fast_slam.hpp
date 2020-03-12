@@ -17,13 +17,14 @@
 #include "boost/random.hpp"
 #include <actionlib/server/simple_action_server.h>
 #include <motion_estimation_mapping_pkg/FastSlamAction.h>
+#include <geometry_msgs/PoseArray.h>
 
 class StateEstimation
 {
 
 public:
     StateEstimation(ros::NodeHandle* nh, int num_particles, const std::string& name): num_particles_(num_particles),
-        num_particles_resampling_(num_particles / 1.5), pose_(Eigen::Vector3f::Zero()), nh_(*nh), action_name_(name),
+        num_particles_resampling_(num_particles / 1.5), pose_(Eigen::Vector3f::Zero()), private_nh_("~"), nh_(*nh), action_name_(name),
          as_(*nh, name, boost::bind(&StateEstimation::executeCB, this, _1), false)
         {
             as_.start();
@@ -38,9 +39,16 @@ public:
     void executeCB(const motion_estimation_mapping_pkg::FastSlamGoal::ConstPtr& goal)
     {
         initialise();
+        
         while(ros::ok())
         {
-            prediction();
+            if (start_)
+            {
+                prediction();
+                correction(MAP_BUILDING);
+                //resampling();
+                calculateFinalEstimate();
+            }
         }
     }
 
@@ -55,7 +63,7 @@ public:
      * @brief Runs the FastSLAM2.0 algorithm
      * @param observations List of Cone messages 
      */
-    void FastSLAM2(const std::vector<perception_pkg::Cone>& observations);
+    void FastSLAM2();
     
     /**
      * @brief Sampling step: applying the motion model to every particle
@@ -67,7 +75,7 @@ public:
      * @param observations A list of Cone messages 
      * @param slam_phase The phase (mapping or localization) the car is currently executing 
      */
-    void correction(const std::vector<perception_pkg::Cone>& observations, SLAM_PHASE slam_phase);
+    void correction(SLAM_PHASE slam_phase);
 
     /**
      * @brief Resamples the particles based on the updated weights from the correction step
@@ -135,10 +143,12 @@ private:
 
     //ROS variables 
     ros::NodeHandle nh_;
+    ros::NodeHandle private_nh_;
     ros::Subscriber odom_sub_;
     ros::Subscriber command_sub_;
     ros::Subscriber joint_states_sub_;
     ros::Subscriber wheel_speeds_sub_;
+    ros::Subscriber cone_sub_;
 
     //vehicle wheelbase
     float wheel_base_; 
@@ -170,17 +180,27 @@ private:
     sensor_msgs::JointState joint_state_;
     bool read_state_;
     int frw_pos_, flw_pos_, brw_vel_, blw_vel_;
+    bool start_;
 
     //visaualization paths 
     ros::Publisher odom_path_pub_;
     nav_msgs::Path odom_path_;
     ros::Publisher pred_path_pub_;
     nav_msgs::Path pred_path_;
+    ros::Publisher slam_path_pub_;
+    nav_msgs::Path slam_path_;
 
     
     //FastSLAM algorithm noise 
     Eigen::Matrix2f R_; //linearized vehicle measurement noise 
     Eigen::Matrix2f Q_; //linearized vehicle control noise 
+
+    //observations
+    std::deque<perception_pkg::Cone> input_data_;
+
+    //landmark visualization
+    geometry_msgs::PoseArray landmark_cloud_;
+    
 };
 
 #endif
