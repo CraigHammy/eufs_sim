@@ -41,11 +41,7 @@ void StateEstimation::initialise()
     start_ = false;
 
     initialiseSubscribers();
-
-    odom_path_pub_ = nh_.advertise<nav_msgs::Path>("odom_path", 1);
-    pred_path_pub_ = nh_.advertise<nav_msgs::Path>("prediction_path", 1);
-    slam_path_pub_ = nh_.advertise<nav_msgs::Path>("slam_path", 1);
-    landmark_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud>("/landmark_cloud", 1);
+    initialisePublishers();
 
     current_time_ = ros::Time::now();
     last_time_ = current_time_;
@@ -85,6 +81,15 @@ void StateEstimation::initialise()
     lap_closure_detected_ = false;
     read_state_ = false;
     ROS_WARN("StateEstimation object initialised");
+}
+
+void StateEstimation::initialisePublishers()
+{
+    odom_path_pub_ = nh_.advertise<nav_msgs::Path>("odom_path", 1);
+    pred_path_pub_ = nh_.advertise<nav_msgs::Path>("prediction_path", 1);
+    slam_path_pub_ = nh_.advertise<nav_msgs::Path>("slam_path", 1);
+    landmark_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/landmark_cloud", 1);
+    slam_estimate_pub_ = nh_.advertise<nav_msgs::Odometry>("/slam_estimate", 1);
 }
 
 void StateEstimation::initialiseSubscribers()
@@ -159,10 +164,10 @@ void StateEstimation::wheelSpeedCallback(const eufs_msgs::WheelSpeedsStamped::Co
     float left_front = 2 * M_PI * (wheel_diameter_/2) * rpm_lf / 60;
     u_.speed = (right_back + left_back) / 2.0;
     u_.steering_angle = msg->steering;
-    start_ = true;
+    //start_ = true;
 
     //ROS_WARN("rpm : %f, wheel diameter: %f", msg->rb_speed, wheel_diameter_);
-    ROS_WARN("linear speed : %f, steering angle: %f", u_.speed, u_.steering_angle);
+    //ROS_WARN("linear speed : %f, steering angle: %f", u_.speed, u_.steering_angle);
 }
 
 /**
@@ -173,6 +178,7 @@ void StateEstimation::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
     //odometry pose
     //ROS_ERROR("odometry received");
+    start_ = true;
     pose_(0) = msg->pose.pose.position.x;
     pose_(1) = msg->pose.pose.position.y;
     pose_(2) = msg->pose.pose.orientation.z;
@@ -213,7 +219,6 @@ void StateEstimation::jointStateCallback(const sensor_msgs::JointState::ConstPtr
     //joint states values
     //ROS_ERROR("CALLBACK: Joint states published.");
     joint_state_ = *msg;
-    read_state_ = true;
 }
 
 /**
@@ -247,9 +252,11 @@ void Particle::motionUpdate(const Eigen::Vector3f& current_pose, float speed, fl
     float delta_th = (speed * delta * tanf(steer)) / wb;
 
     //predict the particle mean
-    mu_(0) += delta_x;
-    mu_(1) += delta_y;
-    mu_(2) += delta_th;
+    //mu_(0) += delta_x;
+    //mu_(1) += delta_y;
+    //mu_(2) += delta_th;
+
+    mu_ = current_pose;
 
     //predict the particle covariance
     sigma_ = Gx * sigma_ * Gx.transpose() + Gu * Q * Gu.transpose();
@@ -260,7 +267,7 @@ void Particle::motionUpdate(const Eigen::Vector3f& current_pose, float speed, fl
  */
 void StateEstimation::prediction()
 {
-    ROS_WARN("prediction");
+    //ROS_WARN("prediction");
     //current robot steering angle from joint state values
     /*float steering_angle = (joint_state_.position[frw_pos_] + joint_state_.position[flw_pos_]) / 2.0;
 
@@ -314,7 +321,7 @@ void StateEstimation::prediction()
             dt * sinf(current_yaw), speed * dt * cosf(current_yaw),
             dt * tanf(steering_angle) / wheel_base_, speed * dt / (pow(cosf(steering_angle), 2) * wheel_base_);
 
-        p->motionUpdate(p->mu_, speed, steering_angle, wheel_base_, dt, Gx, Gu, Q_);
+        p->motionUpdate(pose_, speed, steering_angle, wheel_base_, dt, Gx, Gu, Q_);
 
         /*geometry_msgs::PoseStamped current_pose;
         current_pose.pose.position.x = p->mu_(0);
@@ -342,7 +349,7 @@ void StateEstimation::prediction()
  */
 void StateEstimation::correction(SLAM_PHASE slam_phase)
 {
-    ROS_WARN("correction");
+    //ROS_WARN("correction");
     std::vector<Particle>::iterator p;
     std::deque<perception_pkg::Cone>::const_iterator z;
     std::deque<perception_pkg::Cone> observations(input_data_.begin(), input_data_.end());
@@ -361,7 +368,7 @@ void StateEstimation::correction(SLAM_PHASE slam_phase)
             }
         }
     }
-    ROS_INFO("data associations done");
+    //ROS_INFO("data associations done");
     for(int i = 0; i != input_size; ++i)
     {
         input_data_.pop_front();
@@ -413,8 +420,8 @@ void StateEstimation::correction(SLAM_PHASE slam_phase)
             landmark_cloud_.header.frame_id = "track";
 
             sensor_msgs::PointCloud2 cloud;
-            //sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
-            //landmark_cloud_pub_.publish(landmark_cloud_);
+            sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
+            landmark_cloud_pub_.publish(cloud);
         }
         p->unknown_features_.clear();
     }
@@ -431,8 +438,6 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
 
     boost::shared_ptr<geometry_msgs::Point> z_ptr(new geometry_msgs::Point((z).location));
     Eigen::Vector2f measurement(getMeasurement(z_ptr));
-
-    ROS_WARN("ciao1");
 
     //add some noise to the range observations
     boost::random::uniform_real_distribution<float> distribution(0.0, 1.0);
@@ -457,7 +462,6 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
     std::vector<Landmark>::const_iterator lm;
     for(lm = landmarks_.begin(); lm != landmarks_.end(); ++lm, ++i)
     {
-        ROS_WARN("ciao2");
         Innovation innovation(computeInnovations(mu_, sigma_, *lm, R));
         Eigen::Matrix<float, 2, 3> Hv(innovation.vehicle_jacobian);
         Eigen::Matrix2f Hl(innovation.feature_jacobian);
@@ -469,7 +473,6 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
 
         //perform data association to distinguish new features, and assigning correct observations to known features
         float p = dataAssociations(lm_innov_cov, lm_innov_mean, Hv, zt, z, *lm, R);
-        ROS_WARN("ciao3");
 
         if ((i == 0) || (p > best_p))
         {
@@ -482,21 +485,24 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
     }
 
     Eigen::Vector2f map_feature(z.location.x + mu_(0), z.location.y + mu_(1));
-    if ((best_p < 0.00001) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.5))
+    std::cout << "distance: " << (map_feature - landmarks_.at(best_arg).mu_).norm() << std::endl;
+    std::cout << "data association value:" << best_p << std::endl;
+
+    if ((best_p < 0.0000001) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.5))
     {
-        ROS_WARN("ciao4");
         DataAssociation d;
         d.measurement = measurement;
         d.landmark_id = best_arg;
         unknown_features_.push_back(d);
+        ROS_ERROR("new feature");
     }
     else
     {
-        ROS_WARN("ciao5");
         DataAssociation d;
         d.measurement = measurement;
         d.landmark_id = best_arg;
         known_features_.push_back(d);
+        ROS_ERROR("known feature");
     }
 
     if (slam_phase == MAP_BUILDING) {
@@ -505,7 +511,6 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
     else if (slam_phase == LOCALIZATION) {
         ;//do stuff
     }
-    ROS_WARN("fine");
 }
 
 /**
@@ -781,7 +786,7 @@ void StateEstimation::resampling()
 Eigen::Vector3f StateEstimation::calculateFinalEstimate()
 {
     //set SLAM estimate to zero and normalise all particle weights
-    ROS_WARN("final estimate");
+    //ROS_WARN("final estimate");
     xEst_ = Eigen::Vector3f::Zero();
     normaliseWeights();
 
@@ -794,6 +799,7 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
         xEst_(2) = angleWrap(xEst_(2) + p->weight_ * p->mu_(2));
     }
 
+    //publish pose for slam path visualization
     geometry_msgs::PoseStamped current_pose;
     current_pose.pose.position.x = xEst_(0);
     current_pose.pose.position.y = xEst_(1);
@@ -805,6 +811,18 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
     slam_path_.header = current_pose.header;
     slam_path_.poses.push_back(current_pose);
     slam_path_pub_.publish(slam_path_);
+
+    //publish odometry message for slam estimate
+    nav_msgs::Odometry est;
+    est.header.stamp = ros::Time::now();
+    est.header.frame_id = "track";
+    est.child_frame_id = "base_footprint";
+
+    est.pose.pose.position.x = xEst_(0);
+    est.pose.pose.position.y = xEst_(1);
+    est.pose.pose.position.z = 0.0;
+    est.pose.pose.orientation = orientation;
+    slam_estimate_pub_.publish(est);
 
     return xEst_;
 }

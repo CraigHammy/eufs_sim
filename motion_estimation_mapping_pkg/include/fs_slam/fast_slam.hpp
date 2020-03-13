@@ -98,6 +98,8 @@ private:
 
     void initialiseSubscribers();
 
+    void initialisePublishers();
+
     /**
      * @brief Normalizes the particle weights
      */
@@ -190,6 +192,8 @@ private:
     ros::Publisher slam_path_pub_;
     nav_msgs::Path slam_path_;
 
+    //slam estimate pose
+    ros::Publisher slam_estimate_pub_;
     
     //FastSLAM algorithm noise 
     Eigen::Matrix2f R_; //linearized vehicle measurement noise 
