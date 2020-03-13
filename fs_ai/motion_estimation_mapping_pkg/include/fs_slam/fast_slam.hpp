@@ -17,7 +17,7 @@
 #include "boost/random.hpp"
 #include <actionlib/server/simple_action_server.h>
 #include <motion_estimation_mapping_pkg/FastSlamAction.h>
-#include <geometry_msgs/PoseArray.h>
+#include <sensor_msgs/PointCloud.h>
 
 class StateEstimation
 {
@@ -97,6 +97,8 @@ private:
     void addNewLandmark();
 
     void initialiseSubscribers();
+
+    void initialisePublishers();
 
     /**
      * @brief Normalizes the particle weights
@@ -190,6 +192,8 @@ private:
     ros::Publisher slam_path_pub_;
     nav_msgs::Path slam_path_;
 
+    //slam estimate pose
+    ros::Publisher slam_estimate_pub_;
     
     //FastSLAM algorithm noise 
     Eigen::Matrix2f R_; //linearized vehicle measurement noise 
@@ -199,7 +203,8 @@ private:
     std::deque<perception_pkg::Cone> input_data_;
 
     //landmark visualization
-    geometry_msgs::PoseArray landmark_cloud_;
+    sensor_msgs::PointCloud landmark_cloud_;
+    ros::Publisher landmark_cloud_pub_;
     
 };
 
