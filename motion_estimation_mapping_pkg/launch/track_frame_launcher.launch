@@ -1,3 +1,0 @@
-<launch>
-    <node pkg="motion_estimation_mapping_pkg" type="trackFrameBroadcaster" name="track_frame_broadcaster_node" output="screen"/>
-</launch>
