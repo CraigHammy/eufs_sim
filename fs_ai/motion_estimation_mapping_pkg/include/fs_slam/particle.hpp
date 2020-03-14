@@ -11,8 +11,8 @@
 class Particle
 {
 public:
-    Particle(int num_landmarks): num_lms(num_landmarks) {};
-    Particle(): num_lms(20), mu_(Eigen::Vector3f::Zero()), sigma_(Eigen::Matrix3f::Identity()) {};
+    Particle(int num_landmarks): num_lms(num_landmarks), mu_(Eigen::Vector3f::Zero()), sigma_(Eigen::Matrix3f::Identity()) {};
+    Particle(): num_lms(INT_MAX), mu_(Eigen::Vector3f::Zero()), sigma_(Eigen::Matrix3f::Identity()) {};
 
     /**
      * @brief State estimation prediction based on odometric and robot control state data

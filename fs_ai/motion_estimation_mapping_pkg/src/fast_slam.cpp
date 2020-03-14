@@ -28,6 +28,7 @@
 #include <sensor_msgs/PointCloud.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/point_cloud_conversion.h>
+#include <sensor_msgs/ChannelFloat32.h>
 
 std::time_t now = std::time(0);
 boost::random::mt19937 rng(static_cast<uint32_t>(now));
@@ -363,7 +364,7 @@ void StateEstimation::correction(SLAM_PHASE slam_phase)
             p->measurementUpdate(*z, pose_, R_, Q_, slam_phase);
             if ((p->unknown_features_.size() + p->landmarks_.size()) > 70)
             {
-                ROS_ERROR("error");
+                //ROS_ERROR("error");
                 //exit(0);
             }
         }
@@ -485,8 +486,8 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
     }
 
     Eigen::Vector2f map_feature(z.location.x + mu_(0), z.location.y + mu_(1));
-    std::cout << "distance: " << (map_feature - landmarks_.at(best_arg).mu_).norm() << std::endl;
-    std::cout << "data association value:" << best_p << std::endl;
+    //std::cout << "distance: " << (map_feature - landmarks_.at(best_arg).mu_).norm() << std::endl;
+    //std::cout << "data association value:" << best_p << std::endl;
 
     if ((best_p < 0.0000001) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.5))
     {
@@ -494,7 +495,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
         d.measurement = measurement;
         d.landmark_id = best_arg;
         unknown_features_.push_back(d);
-        ROS_ERROR("new feature");
+        //ROS_ERROR("new feature");
     }
     else
     {
@@ -502,7 +503,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
         d.measurement = measurement;
         d.landmark_id = best_arg;
         known_features_.push_back(d);
-        ROS_ERROR("known feature");
+        //ROS_ERROR("known feature");
     }
 
     if (slam_phase == MAP_BUILDING) {
@@ -691,6 +692,7 @@ void Particle::proposalSampling(const std::vector<DataAssociation> known_feature
 
     //get random sample from multivariate Gaussian/normal distribution
     Eigen::Vector3f uniform_randoms(distribution(rng), distribution(rng), distribution(rng));
+    //std::cout << "uniform numbers\n" << uniform_randoms << std::endl;
     Eigen::Vector3f x_sample(cholesky_L * uniform_randoms * 0.1 + mu_);
     x_sample(2) = angleWrap(x_sample(2));
 
@@ -716,7 +718,7 @@ void Particle::proposalDistribution(const Eigen::Matrix2f& lm_innov_cov, const E
  */
 void StateEstimation::resampling()
 {
-    ROS_WARN("resampling");
+    //ROS_WARN("resampling");
     //normalize weights
     normaliseWeights();
 
@@ -724,11 +726,10 @@ void StateEstimation::resampling()
     Eigen::ArrayXf weights(num_particles_);
     int count = 0;
     std::vector<Particle>::const_iterator p;
-    for (p = particles_.begin(); p != particles_.end(); ++p) {
+    for (p = particles_.begin(); p != particles_.end(); ++p, ++count) {
         weights(count) = (*p).weight_;
-        ++count;
     }
-    ROS_WARN("hello1");
+    //ROS_WARN("ciao1");
     //effective particle number and minimum number of particles
     float Neff = 1.0 / (weights.pow(2).sum());
     float Nmin = num_particles_ * resampling_ratio_;
@@ -737,44 +738,78 @@ void StateEstimation::resampling()
     std::vector<Particle> new_particles(num_particles_);
 
     //vector of cumulative weights
-    Eigen::ArrayXf weights_cumulative(weights.size()), resample_base(weights.size()), resample_ids(weights.size());
+    Eigen::ArrayXf weights_cumulative(num_particles_);
+    Eigen::ArrayXf resample_base(num_particles_);
+    Eigen::ArrayXf resample_ids(num_particles_);
 
     //uniform distribution object
     boost::random::uniform_real_distribution<float> distribution(0.0, 1.0);
 
     if (Neff < Nmin)
     {
-        ROS_WARN("hello2");
         weights_cumulative << cumulativeSum(weights);
+        //std::cout << "cumul\n" << weights_cumulative << std::endl;
         //cumulative vector from 0 to [1 - (1 / NPARTICLES)] in steps of 1 / NPARTICLES
-        resample_base << cumulativeSum(weights * 0.0 + 1 / num_particles_) - 1 / num_particles_;
+        resample_base << cumulativeSum(weights * 0.0 + 1.0 / num_particles_) - 1.0 / num_particles_;
+        //std::cout << "resample base\n" << resample_base << std::endl;
         //add to every cumulative sum a number from uniform random distribution(0.0, 1.0 / NPARTICLES)
         resample_ids << resample_base + distribution(rng) / num_particles_;
+        //std::cout << "resample ids\n" << resample_ids << std::endl;
 
         int count = 0;
         Eigen::VectorXd indexes(weights.size());
         for (int i = 0; i != num_particles_; ++i)
         {
-            ROS_WARN("hello3");
             //see where each resample random number fits in the cumulative sum bins
+            //ROS_WARN("ciao2");
             while ((count <= weights_cumulative.size() - 1) && (resample_ids(count) < weights_cumulative(i)))
+            {
+                //ROS_WARN("ciao3");
                 //if current random number is below a cumulative sum block, add the index of the weight block
                 //if random number is bigger, pass to next cumulative sum by breaking out and increasing i
                 //if array size of index number is exceeded, break out of while loop and increase i until break out of for loop
                 indexes(i) = count;
                 ++count;
+            }
         }
-        ROS_WARN("hello4");
+        //std::cout << "indexes\n" << indexes << std::endl;
         //update particles with resampled particles
         std::vector<Particle> particles_copy(particles_);
+        landmark_cloud_.points.clear();
+        //ROS_WARN("ciao4");
         for (int i = 0; i != indexes.size(); ++i)
         {
-            ROS_WARN("hello5");
+            //ROS_WARN("ciao5");
             particles_.at(i).mu_ = particles_copy.at(indexes(i)).mu_;
             particles_.at(i).sigma_ = particles_copy.at(indexes(i)).sigma_;
             particles_.at(i).landmarks_ = particles_copy.at(indexes(i)).landmarks_;
             //reinitialise the weights so their sum adds up to 1
             particles_.at(i).weight_ = 1.0 / num_particles_;
+
+            std::vector<Landmark>::const_iterator lm;
+            for(lm = particles_.at(i).landmarks_.begin(); lm != particles_.at(i).landmarks_.end(); ++lm)
+            {
+                //ROS_WARN("ciao7");
+                //add new landmark to landmark vector and to landmark cloud for visualization
+                /*geometry_msgs::Point32 lm_point;
+                lm_point.x = lm->mu_(0);
+                lm_point.y = lm->mu_(1);
+                lm_point.z = 0.0;
+                landmark_cloud_.points.push_back(lm_point);
+                landmark_cloud_.header.stamp = ros::Time::now();
+                landmark_cloud_.header.frame_id = "track";
+                
+                sensor_msgs::ChannelFloat32 channel;
+                channel.name = "rgb";
+                std::vector<float> colour(landmark_cloud_.points.size(), 25500);
+                channel.values = colour;
+                std::vector<sensor_msgs::ChannelFloat32> channels(landmark_cloud_.points.size(), channel);
+                landmark_cloud_.channels = channels;
+
+                sensor_msgs::PointCloud2 cloud;
+                sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
+                landmark_cloud_pub_.publish(cloud);*/
+            }
         }
     }
 }
