@@ -133,6 +133,7 @@ void StateEstimation::normaliseWeights()
     for(p = particles_.begin(); p != particles_.end(); ++p)
             sum_w += p->weight_;
 
+    ROS_WARN("sum of weights: %f", sum_w);
     //normalize particle weights using sum of all weights
     try
     {
@@ -142,9 +143,12 @@ void StateEstimation::normaliseWeights()
     //if division by zero occurs, normalize weights using number of particles variable
     catch(std::runtime_error& e)
     {
+        ROS_INFO("division by zero occcurred");
         for(p = particles_.begin(); p != particles_.end(); ++p)
             p->weight_ = 1.0 / num_particles_;
     }
+    //for(p = particles_.begin(); p != particles_.end(); ++p)
+    //       std::cout << "normalized weight " << p->weight_ << std::endl;
 }
 
 /**
@@ -231,7 +235,7 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
     if (msg->colour.compare("orange") && sqrtf(powf(msg->location.x, 2) + powf(msg->location.y, 2)) < 1.0)
         lap_closure_detected_ = true;
     input_data_.push_back(*msg);
-    ROS_INFO("cone published");
+    //ROS_INFO("cone published");
 }
 
 /**
@@ -268,7 +272,7 @@ void Particle::motionUpdate(const Eigen::Vector3f& current_pose, float speed, fl
  */
 void StateEstimation::prediction()
 {
-    //ROS_WARN("prediction");
+    ROS_INFO("prediction");
     //current robot steering angle from joint state values
     /*float steering_angle = (joint_state_.position[frw_pos_] + joint_state_.position[flw_pos_]) / 2.0;
 
@@ -350,7 +354,7 @@ void StateEstimation::prediction()
  */
 void StateEstimation::correction(SLAM_PHASE slam_phase)
 {
-    //ROS_WARN("correction");
+    ROS_INFO("correction");
     std::vector<Particle>::iterator p;
     std::deque<perception_pkg::Cone>::const_iterator z;
     std::deque<perception_pkg::Cone> observations(input_data_.begin(), input_data_.end());
@@ -402,6 +406,7 @@ void StateEstimation::correction(SLAM_PHASE slam_phase)
                 //update landmark with Cholesky decomposition that is more computationally efficient
                 p->updateLandmarkWithCholesky(p->landmarks_.at(k->landmark_id), new_Hl, new_lm_innov_cov, new_lm_innov_mean);
             }
+            std::cout << "updated weight: " << p->weight_ << std::endl;
             p->known_features_.clear();
         }
 
@@ -439,9 +444,6 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
 
     boost::shared_ptr<geometry_msgs::Point> z_ptr(new geometry_msgs::Point((z).location));
     Eigen::Vector2f measurement(getMeasurement(z_ptr));
-
-    //add some noise to the range observations
-    boost::random::uniform_real_distribution<float> distribution(0.0, 1.0);
 
     //assume the observations received are all unique and not repeated
     if(landmarks_.empty())
@@ -563,9 +565,13 @@ float Particle::calculateWeight(const Eigen::Vector2f& innov_mean, const Eigen::
     //calculates the weight of the particle with the current landmark and observation
     Eigen::Matrix2f L;
     L << (Hv * sigma_ * Hv.transpose()) + (Hl * lm_sigma * Hl.transpose()) + R;
+    //std::cout << "L\n" << std::endl;
     float numerator = expf(-0.5 * innov_mean.transpose() * L.inverse() * innov_mean);
+    //std::cout << "numerator: " << numerator << std::endl;
     float denominator =  1 /  sqrtf(2.0 * M_PI * L.determinant());
+    //std::cout << "denominator: " << denominator << std::endl;
     float weight = numerator / denominator;
+    //std::cout << "weight " << weight << std::endl;
     return weight;
 }
 
@@ -718,7 +724,7 @@ void Particle::proposalDistribution(const Eigen::Matrix2f& lm_innov_cov, const E
  */
 void StateEstimation::resampling()
 {
-    //ROS_WARN("resampling");
+    ROS_INFO("resampling");
     //normalize weights
     normaliseWeights();
 
@@ -727,8 +733,10 @@ void StateEstimation::resampling()
     int count = 0;
     std::vector<Particle>::const_iterator p;
     for (p = particles_.begin(); p != particles_.end(); ++p, ++count) {
-        weights(count) = (*p).weight_;
+        weights(count) = p->weight_;
     }
+
+    std::cout << "weights\n" << weights << std::endl;
     //ROS_WARN("ciao1");
     //effective particle number and minimum number of particles
     float Neff = 1.0 / (weights.pow(2).sum());
@@ -757,7 +765,7 @@ void StateEstimation::resampling()
         //std::cout << "resample ids\n" << resample_ids << std::endl;
 
         int count = 0;
-        Eigen::VectorXd indexes(weights.size());
+        Eigen::VectorXd indexes(num_particles_);
         for (int i = 0; i != num_particles_; ++i)
         {
             //see where each resample random number fits in the cumulative sum bins
@@ -768,11 +776,11 @@ void StateEstimation::resampling()
                 //if current random number is below a cumulative sum block, add the index of the weight block
                 //if random number is bigger, pass to next cumulative sum by breaking out and increasing i
                 //if array size of index number is exceeded, break out of while loop and increase i until break out of for loop
-                indexes(i) = count;
+                indexes(count) = i;
                 ++count;
             }
         }
-        //std::cout << "indexes\n" << indexes << std::endl;
+        std::cout << "indexes\n" << indexes << std::endl;
         //update particles with resampled particles
         std::vector<Particle> particles_copy(particles_);
         landmark_cloud_.points.clear();
@@ -791,7 +799,7 @@ void StateEstimation::resampling()
             {
                 //ROS_WARN("ciao7");
                 //add new landmark to landmark vector and to landmark cloud for visualization
-                /*geometry_msgs::Point32 lm_point;
+                geometry_msgs::Point32 lm_point;
                 lm_point.x = lm->mu_(0);
                 lm_point.y = lm->mu_(1);
                 lm_point.z = 0.0;
@@ -808,7 +816,7 @@ void StateEstimation::resampling()
 
                 sensor_msgs::PointCloud2 cloud;
                 sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
-                landmark_cloud_pub_.publish(cloud);*/
+                landmark_cloud_pub_.publish(cloud);
             }
         }
     }
@@ -821,14 +829,21 @@ void StateEstimation::resampling()
 Eigen::Vector3f StateEstimation::calculateFinalEstimate()
 {
     //set SLAM estimate to zero and normalise all particle weights
-    //ROS_WARN("final estimate");
+    ROS_INFO("final estimate");
     xEst_ = Eigen::Vector3f::Zero();
     normaliseWeights();
 
     //since all weights add up to 1, add from 0 the different weighted components of the state of each particle
     std::vector<Particle>::const_iterator p;
-    for (p = particles_.begin(); p != particles_.end(); ++p)
+    int j = 1;
+    for (p = particles_.begin(); p != particles_.end(); ++p, ++j)
     {
+        //ROS_WARN("weight of particle number %d: %f", j, p->weight_);
+        if (p->weight_ != p->weight_)
+        {
+            ROS_ERROR("NaN weight value");
+            exit(0);
+        }
         xEst_(0) += p->weight_ * p->mu_(0);
         xEst_(1) += p->weight_ * p->mu_(1);
         xEst_(2) = angleWrap(xEst_(2) + p->weight_ * p->mu_(2));
@@ -866,7 +881,7 @@ int main(int argc, char** argv)
 {
     ros::init(argc, argv, "slam_server");
     ros::NodeHandle nh;
-    StateEstimation action_server(&nh, 10, "fastslam");
+    StateEstimation action_server(&nh, 5, "fastslam");
     ros::spin();
 
     return 0;

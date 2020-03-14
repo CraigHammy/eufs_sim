@@ -46,8 +46,8 @@ public:
             {
                 prediction();
                 correction(MAP_BUILDING);
-                resampling();
                 calculateFinalEstimate();
+                resampling();
             }
         }
     }

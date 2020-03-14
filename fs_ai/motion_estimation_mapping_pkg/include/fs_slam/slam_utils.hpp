@@ -164,7 +164,7 @@ Eigen::Vector2f getMeasurement(const geometry_msgs::Point::ConstPtr& observation
     Eigen::Matrix3f transformed_cone(transformation * cone);
     float final_x = transformed_cone(0, 2);
     float final_y = transformed_cone(1, 2);
-    float final_yaw = acosf(transformed_cone(0, 0));
+    float final_yaw = asinf(transformed_cone(1, 0));
     final_yaw = angleWrap(final_yaw);
 
     //construct 2d vector made of euclidean distance and angle to landmark
