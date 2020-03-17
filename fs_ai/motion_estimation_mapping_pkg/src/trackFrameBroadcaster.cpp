@@ -36,9 +36,9 @@ public:
 
         transformStamped_.transform.translation.x = msg->pose.pose.position.x;
         transformStamped_.transform.translation.y = msg->pose.pose.position.y;
-        transformStamped_.transform.translation.z = 0.0;
+        transformStamped_.transform.translation.z = msg->pose.pose.position.z;
         
-        geometry_msgs::Quaternion orient = tf::createQuaternionMsgFromYaw(msg->pose.pose.orientation.z);
+        geometry_msgs::Quaternion orient = msg->pose.pose.orientation;
         transformStamped_.transform.rotation = orient;
 
         tfb_.sendTransform(transformStamped_);

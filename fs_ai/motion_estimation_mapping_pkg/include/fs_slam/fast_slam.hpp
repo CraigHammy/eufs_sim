@@ -18,6 +18,7 @@
 #include <actionlib/server/simple_action_server.h>
 #include <motion_estimation_mapping_pkg/FastSlamAction.h>
 #include <sensor_msgs/PointCloud.h>
+#include <visualization_msgs/MarkerArray.h>
 
 class StateEstimation
 {
@@ -123,6 +124,8 @@ private:
      */
     void jointStateCallback(const sensor_msgs::JointState::ConstPtr& msg);
 
+
+    void groundTruthConeCallback(const visualization_msgs::MarkerArray::ConstPtr& msg);
     /**
      * @brief Callback for receiving detected Cone data
      * @param msg A Cone message
@@ -184,6 +187,8 @@ private:
     int frw_pos_, flw_pos_, brw_vel_, blw_vel_;
     bool start_;
 
+    ros::Publisher odom_pub_;
+
     //visaualization paths 
     ros::Publisher odom_path_pub_;
     nav_msgs::Path odom_path_;
@@ -191,6 +196,11 @@ private:
     nav_msgs::Path pred_path_;
     ros::Publisher slam_path_pub_;
     nav_msgs::Path slam_path_;
+
+    ros::Publisher cone_array_pub_;
+    int cone_counter_;
+    visualization_msgs::MarkerArray cone_array_;
+    ros::Subscriber ground_truth_cone_sub_;
 
     //slam estimate pose
     ros::Publisher slam_estimate_pub_;

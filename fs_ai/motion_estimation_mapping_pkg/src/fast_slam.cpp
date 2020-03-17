@@ -29,6 +29,8 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/point_cloud_conversion.h>
 #include <sensor_msgs/ChannelFloat32.h>
+#include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 
 std::time_t now = std::time(0);
 boost::random::mt19937 rng(static_cast<uint32_t>(now));
@@ -40,6 +42,7 @@ void StateEstimation::initialise()
 {
     //read_state_ = false;
     start_ = false;
+    cone_counter_ = 0;
 
     initialiseSubscribers();
     initialisePublishers();
@@ -91,6 +94,8 @@ void StateEstimation::initialisePublishers()
     slam_path_pub_ = nh_.advertise<nav_msgs::Path>("slam_path", 1);
     landmark_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/landmark_cloud", 1);
     slam_estimate_pub_ = nh_.advertise<nav_msgs::Odometry>("/slam_estimate", 1);
+    cone_array_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("/cone_markers", 1);
+    odom_pub_ = nh_.advertise<visualization_msgs::Marker>("/odom_marker", 1);
 }
 
 void StateEstimation::initialiseSubscribers()
@@ -100,6 +105,7 @@ void StateEstimation::initialiseSubscribers()
     wheel_speeds_sub_ = nh_.subscribe<eufs_msgs::WheelSpeedsStamped>("/ros_can/wheel_speeds", 1, boost::bind(&StateEstimation::wheelSpeedCallback, this, _1));
     //command_sub_ = nh_.subscribe<ackermann_msgs::AckermannDriveStamped>("/cmd_vel_out", 1, boost::bind(&StateEstimation::commandCallback, this, _1));
     cone_sub_ = nh_.subscribe<perception_pkg::Cone>("/cones", 1, boost::bind(&StateEstimation::coneCallback, this, _1));
+    ground_truth_cone_sub_ = nh_.subscribe<visualization_msgs::MarkerArray>("/ground_truth/cones/viz", 1, boost::bind(&StateEstimation::groundTruthConeCallback, this, _1));
 }   
 /**
  * @brief Runs the FastSLAM2.0 algorithm
@@ -133,7 +139,7 @@ void StateEstimation::normaliseWeights()
     for(p = particles_.begin(); p != particles_.end(); ++p)
             sum_w += p->weight_;
 
-    ROS_WARN("sum of weights: %f", sum_w);
+    //ROS_WARN("sum of weights: %f", sum_w);
     //normalize particle weights using sum of all weights
     try
     {
@@ -186,7 +192,13 @@ void StateEstimation::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
     start_ = true;
     pose_(0) = msg->pose.pose.position.x;
     pose_(1) = msg->pose.pose.position.y;
-    pose_(2) = msg->pose.pose.orientation.z;
+
+    tf::Quaternion q(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, 
+        msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
+    double roll, pitch, yaw;
+    tf::Matrix3x3 m(q);
+    m.getRPY(roll, pitch, yaw);
+    pose_(2) = yaw;
 
     geometry_msgs::PoseStamped current_pose;
     current_pose.pose.position.x = pose_(0);
@@ -226,6 +238,15 @@ void StateEstimation::jointStateCallback(const sensor_msgs::JointState::ConstPtr
     joint_state_ = *msg;
 }
 
+void StateEstimation::groundTruthConeCallback(const visualization_msgs::MarkerArray::ConstPtr& msg)
+{
+    std::vector<visualization_msgs::Marker>::iterator iter;
+    visualization_msgs::MarkerArray array2;
+    array2 = *msg;
+    for (iter = array2.markers.begin(); iter != array2.markers.end(); ++iter)
+        iter->header.stamp = ros::Time::now();
+    cone_array_pub_.publish(array2);
+}
 /**
  * @brief Callback for receiving detected Cone data
  * @param msg A Cone message
@@ -235,7 +256,28 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
     if (msg->colour.compare("orange") && sqrtf(powf(msg->location.x, 2) + powf(msg->location.y, 2)) < 1.0)
         lap_closure_detected_ = true;
     input_data_.push_back(*msg);
-    //ROS_INFO("cone published");
+    //ROS_WARN("cone published");
+   
+    
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "/velodyne";
+    marker.header.stamp = ros::Time::now();
+    marker.id = cone_counter_;
+    marker.type = visualization_msgs::Marker::CUBE;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.pose.position.x = msg->location.x;
+    marker.pose.position.y = msg->location.y;
+    marker.pose.position.z = msg->location.z;
+    marker.scale.x = 0.15;
+    marker.scale.y = 0.15;
+    marker.scale.z = 0.15;
+    marker.color.r = 1.0f;
+    marker.color.g = 0.0f;
+    marker.color.b = 0.0f;
+    marker.color.a = 1.0;
+    cone_array_.markers.push_back(marker);
+    cone_array_pub_.publish(cone_array_);
+    ++cone_counter_;
 }
 
 /**
@@ -272,7 +314,7 @@ void Particle::motionUpdate(const Eigen::Vector3f& current_pose, float speed, fl
  */
 void StateEstimation::prediction()
 {
-    ROS_INFO("prediction");
+    //ROS_INFO("prediction");
     //current robot steering angle from joint state values
     /*float steering_angle = (joint_state_.position[frw_pos_] + joint_state_.position[flw_pos_]) / 2.0;
 
@@ -354,7 +396,7 @@ void StateEstimation::prediction()
  */
 void StateEstimation::correction(SLAM_PHASE slam_phase)
 {
-    ROS_INFO("correction");
+    //ROS_INFO("correction");
     std::vector<Particle>::iterator p;
     std::deque<perception_pkg::Cone>::const_iterator z;
     std::deque<perception_pkg::Cone> observations(input_data_.begin(), input_data_.end());
@@ -406,7 +448,7 @@ void StateEstimation::correction(SLAM_PHASE slam_phase)
                 //update landmark with Cholesky decomposition that is more computationally efficient
                 p->updateLandmarkWithCholesky(p->landmarks_.at(k->landmark_id), new_Hl, new_lm_innov_cov, new_lm_innov_mean);
             }
-            std::cout << "updated weight: " << p->weight_ << std::endl;
+            //std::cout << "updated weight: " << p->weight_ << std::endl;
             p->known_features_.clear();
         }
 
@@ -491,7 +533,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
     //std::cout << "distance: " << (map_feature - landmarks_.at(best_arg).mu_).norm() << std::endl;
     //std::cout << "data association value:" << best_p << std::endl;
 
-    if ((best_p < 0.0000001) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.5))
+    if ((best_p < 0.0000001) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.25))
     {
         DataAssociation d;
         d.measurement = measurement;
@@ -724,7 +766,7 @@ void Particle::proposalDistribution(const Eigen::Matrix2f& lm_innov_cov, const E
  */
 void StateEstimation::resampling()
 {
-    ROS_INFO("resampling");
+    //ROS_INFO("resampling");
     //normalize weights
     normaliseWeights();
 
@@ -736,7 +778,7 @@ void StateEstimation::resampling()
         weights(count) = p->weight_;
     }
 
-    std::cout << "weights\n" << weights << std::endl;
+    //std::cout << "weights\n" << weights << std::endl;
     //ROS_WARN("ciao1");
     //effective particle number and minimum number of particles
     float Neff = 1.0 / (weights.pow(2).sum());
@@ -780,7 +822,7 @@ void StateEstimation::resampling()
                 ++count;
             }
         }
-        std::cout << "indexes\n" << indexes << std::endl;
+        //std::cout << "indexes\n" << indexes << std::endl;
         //update particles with resampled particles
         std::vector<Particle> particles_copy(particles_);
         landmark_cloud_.points.clear();
@@ -809,7 +851,7 @@ void StateEstimation::resampling()
                 
                 sensor_msgs::ChannelFloat32 channel;
                 channel.name = "rgb";
-                std::vector<float> colour(landmark_cloud_.points.size(), 25500);
+                std::vector<float> colour(landmark_cloud_.points.size(), 255255255);
                 channel.values = colour;
                 std::vector<sensor_msgs::ChannelFloat32> channels(landmark_cloud_.points.size(), channel);
                 landmark_cloud_.channels = channels;
@@ -829,12 +871,13 @@ void StateEstimation::resampling()
 Eigen::Vector3f StateEstimation::calculateFinalEstimate()
 {
     //set SLAM estimate to zero and normalise all particle weights
-    ROS_INFO("final estimate");
+    //ROS_INFO("final estimate");
     xEst_ = Eigen::Vector3f::Zero();
     normaliseWeights();
 
     //since all weights add up to 1, add from 0 the different weighted components of the state of each particle
-    std::vector<Particle>::const_iterator p;
+    std::vector<Particle>::iterator p;
+    
     int j = 1;
     for (p = particles_.begin(); p != particles_.end(); ++p, ++j)
     {
@@ -881,7 +924,7 @@ int main(int argc, char** argv)
 {
     ros::init(argc, argv, "slam_server");
     ros::NodeHandle nh;
-    StateEstimation action_server(&nh, 5, "fastslam");
+    StateEstimation action_server(&nh, 1, "fastslam");
     ros::spin();
 
     return 0;
