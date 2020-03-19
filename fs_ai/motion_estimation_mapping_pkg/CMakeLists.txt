@@ -145,9 +145,10 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 #add_executable(findWayPoints src/findWayPoints.cpp)
 #add_executable(generateCostMap src/generateCostMap.cpp)
-add_executable(trackFrameBroadcaster src/trackFrameBroadcaster.cpp)
+add_executable(global_frame_broadcaster src/global_frame_broadcaster.cpp)
 add_executable(fast_slam src/fast_slam.cpp)
 add_executable(action_client src/action_client.cpp)
+add_executable(gps_imu_tests src/gps_imu_tests.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -159,9 +160,10 @@ add_executable(action_client src/action_client.cpp)
 ## same as for the library above
 #add_dependencies(findWayPoints ${findWayPoints_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 #add_dependencies(generateCostMap ${generateCostMap_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(trackFrameBroadcaster ${trackFrameBroadcaster_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(global_frame_broadcaster ${global_frame_broadcaster_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(fast_slam ${fast_slam_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(action_client ${action_client_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(gps_imu_tests ${gps_imu_tests_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 #target_link_libraries(findWayPoints
@@ -170,13 +172,16 @@ add_dependencies(action_client ${action_client_EXPORTED_TARGETS} ${catkin_EXPORT
 #target_link_libraries(generateCostMap
 #  ${catkin_LIBRARIES}
 #)
-target_link_libraries(trackFrameBroadcaster
+target_link_libraries(global_frame_broadcaster
   ${catkin_LIBRARIES}
 )
 target_link_libraries(fast_slam
   ${catkin_LIBRARIES}
 )
 target_link_libraries(action_client
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(gps_imu_tests
   ${catkin_LIBRARIES}
 )
 
