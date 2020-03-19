@@ -7,3 +7,6 @@
 [submodule "darknet_ros"]
 	path = darknet_ros
 	url = https://github.com/leggedrobotics/darknet_ros.git
+[submodule "fs_ai/motion_estimation_mapping_pkg/include/geonav_transform"]
+	path = fs_ai/motion_estimation_mapping_pkg/include/geonav_transform
+	url = https://github.com/bsb808/geonav_transform
