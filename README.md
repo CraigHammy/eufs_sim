@@ -4,7 +4,6 @@
 - [eufs_sim](https://gitlab.com/eufs/eufs_sim)
 - [eufs_messages](https://gitlab.com/eufs/eufs_msgs)
 - [darknet_ros](https://github.com/leggedrobotics/darknet_ros)
-- [geonav_transform](https://github.com/bsb808/geonav_transform)
 - fs_ai
 
 ## 2. Install Prerequisites 

@@ -41,16 +41,6 @@ private:
 
 void Testing::geodetic_to_enu()
 {
-    //USE PRIVATE VARIABLES TO GET THESE VALUES FROM THE PARAMETER SERVER 
-    std::string odom_frame_id = "track";
-    std::string base_footprint_frame_id = "base_footprint";
-    double datum_latitude = 50;
-    double datum_longitude = 3;
-    double datum_yaw = 0.0;
-    double frequency = 10.0;
-    double delay = 0.0;
-
-
 }
 
 int main(int argc, char** argv)
