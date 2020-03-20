@@ -14,15 +14,24 @@ void EKF::initialise()
     private_nh_.param("ekf_control_noise_x", sigmaUx, float(0.1));
     private_nh_.param("ekf_control_noise_y", sigmaUy, float(0.1));
     private_nh_.param("ekf_control_noise_yaw", sigmaUth, float(1.0 * M_PI / 180));
+    private_nh_.param("ekf_control_noise_vel", sigmaUv, float(1.0));
+    private_nh_.param("ekf_control_noise_steer", sigmaUst, float(1.0 * M_PI / 180));
     private_nh_.param("ekf_gps_noise_x", sigmaZx, float(0.1));
     private_nh_.param("ekf_gps_noise_y", sigmaZy, float(0.1));
     private_nh_.param("ekf_imu_noise_yaw", sigmaZth, float(1.0 * M_PI / 180));
 
     //initialise control noise covariance matrix
-    Q_ << powf(sigmaUx, 2), 0, 0, powf(sigmaUy, 2), 0, 0, powf(sigmaUth, 2);
+    Q_ << powf(sigmaUx, 2), 0, 0, 0, 0, 
+        0, powf(sigmaUy, 2), 0, 0, 0, 
+        0, 0, powf(sigmaUth, 2), 0, 0,
+        0, 0, 0, powf(sigmaUv, 2), 0,
+        0, 0, 0, 0, powf(sigmaUst, 2);
 
     //initialise measurement noise covariance matrix
-    R_ << powf(sigmaZx, 2), 0, 0, powf(sigmaZy, 2), 0, 0, powf(sigmaZth, 2);
+    R_ << powf(sigmaZx, 2), 0, 0, 0, powf(sigmaZy, 2), 0, 0, 0, powf(sigmaZth, 2);
+
+    mu_ << Eigen::Matrix<float, 5, 1>::Zero();
+    sigma_ << Eigen::Matrix<float, 5, 5>::Identity();
 }
 
 /**
@@ -30,31 +39,35 @@ void EKF::initialise()
  * @param
  * @return
  */
-void EKF::ekf_estimation_step(Eigen::Vector3f& xEst, Eigen::Matrix3f& pEst, const Eigen::Vector2f& u, float dt, float wb, const Eigen::Vector3f& z)
+Eigen::Vector3f EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, float wb, const  Eigen::Vector3f& z)
 {
     //prediction step
-    Eigen::Vector3f xPred;
-    Eigen::Matrix3f pPred;
-    Eigen::Matrix<float, 3, 2> jX;
+    Eigen::Matrix<float, 5, 1> xPred;
+    Eigen::Matrix<float, 5, 5> pPred;
+    Eigen::Matrix<float, 5, 5> jX;
 
-    xPred << motion_model(xEst, u, dt, wb);
-    jX << jacobian_position(xEst, u, dt, wb);
-    pPred << jX * pEst * jX.transpose() + Q_;
+    xPred << motion_model(mu_, u, dt, wb);
+    jX << jacobian_position(mu_, u, dt, wb);
+    pPred << jX * sigma_ * jX.transpose() + Q_;
 
     //correction (update) step
-    Eigen::Matrix3f jZ;
-    Eigen::Matrix3f innov_cov;
-    Eigen::Matrix3f K;
-    Eigen::Vector3f zPred;
-    Eigen::Vector3f innov_seq;
+    Eigen::Matrix<float, 3, 5> jZ;
+    Eigen::Matrix<float, 3, 3> innov_cov;
+    Eigen::Matrix<float, 5, 3> K;
+    Eigen::Matrix<float, 3, 1> zPred;
+    Eigen::Matrix<float, 3, 1> innov_seq;
 
     jZ << jacobian_measurement();
     innov_cov << jZ * pPred * jZ.transpose() + R_;
     K << pPred * jZ.transpose() * innov_cov.inverse();
     zPred << measurement_model(xPred, jZ);
     innov_seq << z - zPred;
-    xEst = xPred + K * innov_seq;
-    pEst = (Eigen::Matrix3f::Identity() - K * jZ) * pPred;
+    mu_ = xPred + K * innov_seq;
+    sigma_ = (Eigen::Matrix<float, 5, 5>::Identity() - K * jZ) * pPred;
+
+    Eigen::Vector3f position;
+    position << mu_(0), mu_(1), mu_(2);
+    return position;
 }
 
 /**
@@ -62,7 +75,7 @@ void EKF::ekf_estimation_step(Eigen::Vector3f& xEst, Eigen::Matrix3f& pEst, cons
  * @param
  * @return
  */
-Eigen::Vector3f EKF::motion_model(const Eigen::Vector3f& xEst, const Eigen::Vector2f& u, float dt, float wb)
+ Eigen::Matrix<float, 5, 1> EKF::motion_model(const  Eigen::Matrix<float, 5, 1>& xEst, const Eigen::Vector2f& u, float dt, float wb)
 {
     //unpack the inputs
     float speed = u(0);
@@ -74,8 +87,8 @@ Eigen::Vector3f EKF::motion_model(const Eigen::Vector3f& xEst, const Eigen::Vect
     float delta_th = (speed * dt * tanf(steering_angle)) / wb;
 
     //calculate new estimates from motion model
-    Eigen::Vector3f xPred;
-    xPred << xEst(0) + delta_x, xEst(1) + delta_y, xEst(2) + delta_th;
+    Eigen::Matrix<float, 5, 1> xPred;
+    xPred << xEst(0) + delta_x, xEst(1) + delta_y, xEst(2) + delta_th, speed, steering_angle;
     return xPred;
 }
 
@@ -84,7 +97,7 @@ Eigen::Vector3f EKF::motion_model(const Eigen::Vector3f& xEst, const Eigen::Vect
  * @param
  * @return
  */
-Eigen::Vector3f EKF::measurement_model(const Eigen::Vector3f& xPred, const Eigen::Matrix3f& jZ)
+ Eigen::Vector3f EKF::measurement_model(const Eigen::Matrix<float, 5, 1>& xPred, const Eigen::Matrix<float, 3, 5>& jZ)
 {
     Eigen::Vector3f z;
     z << jZ * xPred;
@@ -96,16 +109,18 @@ Eigen::Vector3f EKF::measurement_model(const Eigen::Vector3f& xPred, const Eigen
  * @param
  * @return
  */
-Eigen::Matrix<float, 3, 2> EKF::jacobian_position(const Eigen::Vector3f& x, const Eigen::Vector2f& u, float dt, float wb)
+Eigen::Matrix<float, 5, 5> EKF::jacobian_position(const Eigen::Matrix<float, 5, 1>& x, const Eigen::Vector2f& u, float dt, float wb)
 {
     float speed = u(0);
     float steering_angle = u(1);
     float current_yaw = x(2);
 
-    Eigen::Matrix<float, 3, 2> jX;
-    jX << dt * cosf(current_yaw), -speed * dt * sinf(current_yaw),
-          dt * sinf(current_yaw), speed * dt * cosf(current_yaw),
-          dt * tanf(steering_angle) / wb, speed * dt / (pow(cosf(steering_angle), 2) * wb);
+    Eigen::Matrix<float, 5, 5> jX;
+    jX << 1, 0, 0,  dt * cosf(current_yaw), -speed * dt * sinf(current_yaw),
+          0, 1, 0, dt * sinf(current_yaw), speed * dt * cosf(current_yaw),
+          0, 0, 1, dt * tanf(steering_angle) / wb, speed * dt / (pow(cosf(steering_angle), 2) * wb),
+          0, 0, 0, 1, 0,
+          0, 0, 0, 0, 1;
     return jX;
 }
 
@@ -114,13 +129,13 @@ Eigen::Matrix<float, 3, 2> EKF::jacobian_position(const Eigen::Vector3f& x, cons
  * @param
  * @return
  */
-Eigen::Matrix3f EKF::jacobian_measurement()
+Eigen::Matrix<float, 3, 5> EKF::jacobian_measurement()
 {
     //no non-linearity since the values from GPS and IMU are provided by the sensors itself, not calculated from them
-    Eigen::Matrix3f jZ;
-    jZ << 1, 0, 0,
-          0, 1, 0,
-          0, 0, 1;
+    Eigen::Matrix<float, 3, 5> jZ;
+    jZ << 1, 0, 0, 0, 0,
+          0, 1, 0, 0, 0,
+          0, 0, 1, 0, 0;
     return jZ;
 }
 

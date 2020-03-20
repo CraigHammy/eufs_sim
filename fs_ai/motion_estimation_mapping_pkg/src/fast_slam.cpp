@@ -333,7 +333,8 @@ void StateEstimation::prediction(EKF& ekf)
     //ROS_WARN("dt: %f", dt);
     last_time_ = current_time_;
 
-    Eigen::Vector3f z(gps_x_, gps_y_, imu_yaw_);
+    Eigen::Vector3f z;
+    z << gps_x_, gps_y_, imu_yaw_;
     Eigen::Vector2f u(speed, steering_angle);
 
     std::vector<Particle>::iterator p;
@@ -353,8 +354,8 @@ void StateEstimation::prediction(EKF& ekf)
             dt * sinf(current_yaw), speed * dt * cosf(current_yaw),
             dt * tanf(steering_angle) / wheel_base_, speed * dt / (pow(cosf(steering_angle), 2) * wheel_base_);
 
-        ekf.ekf_estimation_step(p->mu_, p->sigma_, u, dt, wheel_base_, z);
-
+        p->mu_ = ekf.ekf_estimation_step(u, dt, wheel_base_, z);
+        p->sigma_ = Gx * p->sigma_ * Gx.transpose() + Gu * Q_ * Gu.transpose();
         //p->motionUpdate(ekf, pose_, speed, steering_angle, wheel_base_, dt, z, Gx, Gu, Q_);
 
         /*geometry_msgs::PoseStamped current_pose;

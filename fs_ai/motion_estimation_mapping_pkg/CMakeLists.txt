@@ -177,16 +177,13 @@ target_link_libraries(global_frame_broadcaster
   ${catkin_LIBRARIES}
 )
 target_link_libraries(fast_slam
-  ${catkin_LIBRARIES}
+  ${catkin_LIBRARIES} ekf_localisation
 )
 target_link_libraries(action_client
   ${catkin_LIBRARIES}
 )
 target_link_libraries(gps_imu_tests
   ${catkin_LIBRARIES}
-)
-target_link_libraries(ekf_localisation  
-  motion_estimation_mapping_pkg
 )
 
 #############
