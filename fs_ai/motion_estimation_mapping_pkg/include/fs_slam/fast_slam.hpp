@@ -19,6 +19,7 @@
 #include <motion_estimation_mapping_pkg/FastSlamAction.h>
 #include <sensor_msgs/PointCloud.h>
 #include <visualization_msgs/MarkerArray.h>
+#include "ekf_localisation.hpp"
 
 class StateEstimation
 {
@@ -39,13 +40,14 @@ public:
 
     void executeCB(const motion_estimation_mapping_pkg::FastSlamGoal::ConstPtr& goal)
     {
+        EKF ekf(&private_nh_);
         initialise();
-        
+
         while(ros::ok())
         {
             if (start_)
             {
-                prediction();
+                prediction(ekf);
                 correction(MAP_BUILDING);
                 calculateFinalEstimate();
                 resampling();
@@ -59,17 +61,11 @@ public:
      * @brief Initialise a StateEstimation object and the Particles objects
      */
     void initialise();
-
-    /**
-     * @brief Runs the FastSLAM2.0 algorithm
-     * @param observations List of Cone messages 
-     */
-    void FastSLAM2();
     
     /**
      * @brief Sampling step: applying the motion model to every particle
      */
-    void prediction();
+    void prediction(EKF& ekf);
 
     /**
      * @brief Correction step: applying the measurement model to every particle

@@ -59,10 +59,10 @@ void StateEstimation::initialise()
     private_nh_.getParam("max_steering", max_steering_);
     private_nh_.getParam("wheel_base", wheel_base_);
     private_nh_.getParam("wheel_diameter", wheel_diameter_);
-    nh_.param("control_noise_velocity", sigmaV, float(1.0));
-    nh_.param("control_noise_steering_angle", sigmaG, float(2.5 * M_PI / 180));
-    nh_.param("measurement_noise_euclidean_distance", sigmaR, float(0.5));
-    nh_.param("measurement_noise_angle_difference", sigmaB, float(2.5 * M_PI / 180));
+    nh_.param("slam_control_noise_velocity", sigmaV, float(1.0));
+    nh_.param("slam_control_noise_steering_angle", sigmaG, float(2.5 * M_PI / 180));
+    nh_.param("slam_measurement_noise_euclidean_distance", sigmaR, float(0.5));
+    nh_.param("slam_measurement_noise_angle_difference", sigmaB, float(2.5 * M_PI / 180));
     nh_.param("resampling_ratio_particles", resampling_ratio_, float(num_particles_ * 0.75));
 
     //get joint state values to retrieve current linear speed and steering angle of the car
@@ -107,26 +107,6 @@ void StateEstimation::initialiseSubscribers()
     cone_sub_ = nh_.subscribe<perception_pkg::Cone>("/cones", 1, boost::bind(&StateEstimation::coneCallback, this, _1));
     ground_truth_cone_sub_ = nh_.subscribe<visualization_msgs::MarkerArray>("/ground_truth/cones/viz", 1, boost::bind(&StateEstimation::groundTruthConeCallback, this, _1));
 }   
-/**
- * @brief Runs the FastSLAM2.0 algorithm
- * @param observations List of Cone messages
- */
-void StateEstimation::FastSLAM2()
-{
-    while(1)
-    {
-        prediction();
-        if (!lap_closure_detected_)
-        {
-            correction(MAP_BUILDING);
-        }
-        else
-        {
-            correction(LOCALIZATION);
-        }
-        calculateFinalEstimate();
-    }
-}
 
 /**
  * @brief Normalizes the particle weights
@@ -312,7 +292,7 @@ void Particle::motionUpdate(const Eigen::Vector3f& current_pose, float speed, fl
 /**
  * @brief Sampling step: applying the motion model to every particle
  */
-void StateEstimation::prediction()
+void StateEstimation::prediction(EKF& ekf)
 {
     //ROS_INFO("prediction");
     //current robot steering angle from joint state values
