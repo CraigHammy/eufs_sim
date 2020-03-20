@@ -20,6 +20,8 @@
 #include <sensor_msgs/PointCloud.h>
 #include <visualization_msgs/MarkerArray.h>
 #include "ekf_localisation.hpp"
+#include <sensor_msgs/Imu.h>
+#include <geodetic_to_enu_conversion_pkg/Gps.h>
 
 class StateEstimation
 {
@@ -41,6 +43,8 @@ public:
     void executeCB(const motion_estimation_mapping_pkg::FastSlamGoal::ConstPtr& goal)
     {
         EKF ekf(&private_nh_);
+        ekf.initialise();
+        
         initialise();
 
         while(ros::ok())
@@ -48,9 +52,9 @@ public:
             if (start_)
             {
                 prediction(ekf);
-                correction(MAP_BUILDING);
+                //correction(MAP_BUILDING);
                 calculateFinalEstimate();
-                resampling();
+                //resampling();
             }
         }
     }
@@ -134,6 +138,20 @@ private:
      */
     void wheelSpeedCallback(const eufs_msgs::WheelSpeedsStamped::ConstPtr& msg);
 
+    /**
+     * @brief Callback for receiving converted NavSatFix to Gps data 
+     * @param msg A Gps message
+     */
+    void gpsCallback(const geodetic_to_enu_conversion_pkg::Gps::ConstPtr& msg);
+
+    /**
+     * @brief Callback for receiving Imu data 
+     * @param msg An Imu message
+     */
+    void imuCallback(const sensor_msgs::Imu::ConstPtr& msg);
+
+
+
     boost::random::mt19937 rng;
 
     //action server variables 
@@ -150,6 +168,8 @@ private:
     ros::Subscriber joint_states_sub_;
     ros::Subscriber wheel_speeds_sub_;
     ros::Subscriber cone_sub_;
+    ros::Subscriber gps_sub_;
+    ros::Subscriber imu_sub_;
 
     //vehicle wheelbase
     float wheel_base_; 
@@ -211,6 +231,10 @@ private:
     //landmark visualization
     sensor_msgs::PointCloud landmark_cloud_;
     ros::Publisher landmark_cloud_pub_;
+
+    //GPS x and y locations, and IMU yaw euler orientation
+    float gps_x_, gps_y_;
+    float imu_yaw_;
     
 };
 

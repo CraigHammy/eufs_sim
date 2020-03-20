@@ -8,7 +8,7 @@
 class EKF
 {
 public:
-    EKF(ros::NodeHandle* private_nh): private_nh_(*private_nh) {initialise();};
+    EKF(ros::NodeHandle* private_nh): private_nh_(*private_nh) {};
 
     /**
      * @brief

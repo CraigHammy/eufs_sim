@@ -31,6 +31,7 @@
 #include <sensor_msgs/ChannelFloat32.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
+#include "ekf_localisation.hpp"
 
 std::time_t now = std::time(0);
 boost::random::mt19937 rng(static_cast<uint32_t>(now));
@@ -92,10 +93,10 @@ void StateEstimation::initialisePublishers()
     odom_path_pub_ = nh_.advertise<nav_msgs::Path>("odom_path", 1);
     pred_path_pub_ = nh_.advertise<nav_msgs::Path>("prediction_path", 1);
     slam_path_pub_ = nh_.advertise<nav_msgs::Path>("slam_path", 1);
-    landmark_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/landmark_cloud", 1);
+    //landmark_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/landmark_cloud", 1);
     slam_estimate_pub_ = nh_.advertise<nav_msgs::Odometry>("/slam_estimate", 1);
-    cone_array_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("/cone_markers", 1);
-    odom_pub_ = nh_.advertise<visualization_msgs::Marker>("/odom_marker", 1);
+    //cone_array_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("/cone_markers", 1);
+    //odom_pub_ = nh_.advertise<visualization_msgs::Marker>("/odom_marker", 1);
 }
 
 void StateEstimation::initialiseSubscribers()
@@ -104,8 +105,10 @@ void StateEstimation::initialiseSubscribers()
     //joint_states_sub_ = nh_.subscribe<sensor_msgs::JointState>("/eufs/joint_states", 1, boost::bind(&StateEstimation::jointStateCallback, this, _1));
     wheel_speeds_sub_ = nh_.subscribe<eufs_msgs::WheelSpeedsStamped>("/ros_can/wheel_speeds", 1, boost::bind(&StateEstimation::wheelSpeedCallback, this, _1));
     //command_sub_ = nh_.subscribe<ackermann_msgs::AckermannDriveStamped>("/cmd_vel_out", 1, boost::bind(&StateEstimation::commandCallback, this, _1));
-    cone_sub_ = nh_.subscribe<perception_pkg::Cone>("/cones", 1, boost::bind(&StateEstimation::coneCallback, this, _1));
-    ground_truth_cone_sub_ = nh_.subscribe<visualization_msgs::MarkerArray>("/ground_truth/cones/viz", 1, boost::bind(&StateEstimation::groundTruthConeCallback, this, _1));
+    //cone_sub_ = nh_.subscribe<perception_pkg::Cone>("/cones", 1, boost::bind(&StateEstimation::coneCallback, this, _1));
+    //ground_truth_cone_sub_ = nh_.subscribe<visualization_msgs::MarkerArray>("/ground_truth/cones/viz", 1, boost::bind(&StateEstimation::groundTruthConeCallback, this, _1));
+    gps_sub_ = nh_.subscribe<geodetic_to_enu_conversion_pkg::Gps>("/odometry/gps", 1, boost::bind(&StateEstimation::gpsCallback, this, _1));
+    imu_sub_ = nh_.subscribe<sensor_msgs::Imu>("/imu", 1, boost::bind(&StateEstimation::imuCallback, this, _1));
 }   
 
 /**
@@ -261,6 +264,30 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
 }
 
 /**
+ * @brief Callback for receiving converted NavSatFix to Gps data 
+ * @param msg A Gps message
+ */
+void StateEstimation::gpsCallback(const geodetic_to_enu_conversion_pkg::Gps::ConstPtr& msg)
+{
+    gps_x_ = float(msg->x);
+    gps_y_ = float(msg->y);
+}
+
+/**
+ * @brief Callback for receiving Imu data 
+ * @param msg An Imu message
+ */
+void StateEstimation::imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
+{
+    tf::Quaternion q(msg->orientation.x, msg->orientation.y,
+                    msg->orientation.z, msg->orientation.w);
+    tf::Matrix3x3 m(q);
+    double pitch, roll, yaw;
+    m.getRPY(roll, pitch, yaw);
+    imu_yaw_ = yaw;
+}
+
+/**
  * @brief State estimation prediction based on odometric and robot control state data
  * @param current_pose A RobotPose object, describing the current pose estimate
  * @param speed The current linear speed of the robot
@@ -271,22 +298,20 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
  * @param Gv Eigen 3x2 Jacobian matrix with respect to control
  * @param Q Eigen 2x2 covariance matrix of control noise
  */
-void Particle::motionUpdate(const Eigen::Vector3f& current_pose, float speed, float steer, float wb, float delta, const Eigen::Matrix3f& Gx, const Eigen::Matrix<float, 3, 2>& Gu, const Eigen::Matrix2f& Q)
+void Particle::motionUpdate(const Eigen::Vector3f& current_pose, float speed, float steer, float wb, float delta, Eigen::Vector3f z, const Eigen::Matrix3f& Gx, const Eigen::Matrix<float, 3, 2>& Gu, const Eigen::Matrix2f& Q)
 {
     //calculate the difference from the last known pose
-    float delta_x = speed * cosf(current_pose(2)) * delta;
-    float delta_y = speed * sinf(current_pose(2)) * delta;
-    float delta_th = (speed * delta * tanf(steer)) / wb;
+    //float delta_x = speed * cosf(current_pose(2)) * delta;
+    //float delta_y = speed * sinf(current_pose(2)) * delta;
+    //float delta_th = (speed * delta * tanf(steer)) / wb;
 
     //predict the particle mean
     //mu_(0) += delta_x;
     //mu_(1) += delta_y;
     //mu_(2) += delta_th;
 
-    mu_ = current_pose;
-
     //predict the particle covariance
-    sigma_ = Gx * sigma_ * Gx.transpose() + Gu * Q * Gu.transpose();
+    //sigma_ = Gx * sigma_ * Gx.transpose() + Gu * Q * Gu.transpose();
 }
 
 /**
@@ -294,29 +319,6 @@ void Particle::motionUpdate(const Eigen::Vector3f& current_pose, float speed, fl
  */
 void StateEstimation::prediction(EKF& ekf)
 {
-    //ROS_INFO("prediction");
-    //current robot steering angle from joint state values
-    /*float steering_angle = (joint_state_.position[frw_pos_] + joint_state_.position[flw_pos_]) / 2.0;
-
-    //retrieving linear velocity and capping it using min and max achievable values
-    float reference_speed;
-    reference_speed = (u_.speed > max_speed_) ? max_speed_ : u_.speed;
-    reference_speed = (u_.speed < -max_speed_) ? -max_speed_ : u_.speed;
-
-    //current robot linear velocity from joint state values
-    float v1, v2, speed;
-    if (reference_speed == 0.0)
-    {
-        v1 = 0.0;
-        v2 = 0.0;
-    }
-    else
-    {
-        v1 = joint_state_.velocity[blw_vel_] * (wheel_diameter_ / 2.0);
-        v2 = joint_state_.velocity[brw_vel_] * (wheel_diameter_ / 2.0);
-    }
-    speed = -(v1 + v2) / 2.0;
-    */
    float steering_angle = u_.steering_angle;
    float speed = u_.speed;
    if (speed > max_speed_) speed = max_speed_;
@@ -330,6 +332,9 @@ void StateEstimation::prediction(EKF& ekf)
     float dt = current_time_.toSec() - last_time_.toSec();
     //ROS_WARN("dt: %f", dt);
     last_time_ = current_time_;
+
+    Eigen::Vector3f z(gps_x_, gps_y_, imu_yaw_);
+    Eigen::Vector2f u(speed, steering_angle);
 
     std::vector<Particle>::iterator p;
     for (p = particles_.begin(); p != particles_.end(); ++p)
@@ -348,7 +353,9 @@ void StateEstimation::prediction(EKF& ekf)
             dt * sinf(current_yaw), speed * dt * cosf(current_yaw),
             dt * tanf(steering_angle) / wheel_base_, speed * dt / (pow(cosf(steering_angle), 2) * wheel_base_);
 
-        p->motionUpdate(pose_, speed, steering_angle, wheel_base_, dt, Gx, Gu, Q_);
+        ekf.ekf_estimation_step(p->mu_, p->sigma_, u, dt, wheel_base_, z);
+
+        //p->motionUpdate(ekf, pose_, speed, steering_angle, wheel_base_, dt, z, Gx, Gu, Q_);
 
         /*geometry_msgs::PoseStamped current_pose;
         current_pose.pose.position.x = p->mu_(0);

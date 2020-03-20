@@ -1,5 +1,7 @@
 #include <ros/ros.h>
 #include "ekf_localisation.hpp"
+#include <Eigen/Core>
+#include <Eigen/Dense>
 
 /**
  * @brief

@@ -7,6 +7,7 @@
 #include <vector>
 #include <Eigen/Core>
 #include "boost/random.hpp"
+#include "ekf_localisation.hpp"
 
 class Particle
 {
@@ -25,7 +26,7 @@ public:
      * @param Gv Eigen 3x2 Jacobian matrix with respect to control
      * @param Q Eigen 2x2 covariance matrix of control noise
      */
-    void motionUpdate(const Eigen::Vector3f& current_pose, float speed, float steer, float wb, float delta, const Eigen::Matrix3f& Gx, const Eigen::Matrix<float, 3, 2>& Gu, const Eigen::Matrix2f& Q);
+    void motionUpdate(const Eigen::Vector3f& current_pose, float speed, float steer, float wb, float delta, Eigen::Vector3f z, const Eigen::Matrix3f& Gx, const Eigen::Matrix<float, 3, 2>& Gu, const Eigen::Matrix2f& Q);
 
     /**
      * @brief Perform correction step on a particle
