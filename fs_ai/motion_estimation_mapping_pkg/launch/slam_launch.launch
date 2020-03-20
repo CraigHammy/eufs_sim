@@ -7,6 +7,8 @@
 
     <include file="$(find motion_estimation_mapping_pkg)/launch/track_frame_launcher.launch"/>
 
+    <include file="$(find geodetic_to_enu_conversion_pkg)/launch/conversion_launcher.launch"/>
+
     <node pkg="motion_estimation_mapping_pkg" type="fast_slam" name="slam_server" output="screen">
         <param name="max_speed" type="double" value="20.0"/>
         <param name="max_steering" type="double" value="0.45"/>

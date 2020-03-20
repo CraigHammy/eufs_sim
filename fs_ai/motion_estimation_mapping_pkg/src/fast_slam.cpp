@@ -93,7 +93,7 @@ void StateEstimation::initialisePublishers()
     odom_path_pub_ = nh_.advertise<nav_msgs::Path>("odom_path", 1);
     pred_path_pub_ = nh_.advertise<nav_msgs::Path>("prediction_path", 1);
     slam_path_pub_ = nh_.advertise<nav_msgs::Path>("slam_path", 1);
-    //landmark_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/landmark_cloud", 1);
+    landmark_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/landmark_cloud", 1);
     slam_estimate_pub_ = nh_.advertise<nav_msgs::Odometry>("/slam_estimate", 1);
     //cone_array_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("/cone_markers", 1);
     //odom_pub_ = nh_.advertise<visualization_msgs::Marker>("/odom_marker", 1);
@@ -358,7 +358,7 @@ void StateEstimation::prediction(EKF& ekf)
         p->sigma_ = Gx * p->sigma_ * Gx.transpose() + Gu * Q_ * Gu.transpose();
         //p->motionUpdate(ekf, pose_, speed, steering_angle, wheel_base_, dt, z, Gx, Gu, Q_);
 
-        /*geometry_msgs::PoseStamped current_pose;
+        geometry_msgs::PoseStamped current_pose;
         current_pose.pose.position.x = p->mu_(0);
         current_pose.pose.position.y = p->mu_(1);
         current_pose.pose.position.z = 0.0;
@@ -371,9 +371,7 @@ void StateEstimation::prediction(EKF& ekf)
         
         pred_path_.header = current_pose.header;
         pred_path_.poses.push_back(current_pose);
-        //ROS_INFO("hello1");
-        pred_path_pub_.publish(pred_path_);*/
-        //ROS_INFO("hello2");
+        pred_path_pub_.publish(pred_path_);
     }
 }
 
@@ -912,7 +910,7 @@ int main(int argc, char** argv)
 {
     ros::init(argc, argv, "slam_server");
     ros::NodeHandle nh;
-    StateEstimation action_server(&nh, 1, "fastslam");
+    StateEstimation action_server(&nh, 10, "fastslam");
     ros::spin();
 
     return 0;

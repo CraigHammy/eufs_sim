@@ -52,9 +52,9 @@ public:
             if (start_)
             {
                 prediction(ekf);
-                //correction(MAP_BUILDING);
+                correction(MAP_BUILDING);
                 calculateFinalEstimate();
-                //resampling();
+                resampling();
             }
         }
     }

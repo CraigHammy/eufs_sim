@@ -11,13 +11,13 @@
 void EKF::initialise()
 {
     //initialise parameters from server 
-    private_nh_.param("ekf_control_noise_x", sigmaUx, float(0.1));
-    private_nh_.param("ekf_control_noise_y", sigmaUy, float(0.1));
+    private_nh_.param("ekf_control_noise_x", sigmaUx, float(0.001));
+    private_nh_.param("ekf_control_noise_y", sigmaUy, float(0.001));
     private_nh_.param("ekf_control_noise_yaw", sigmaUth, float(1.0 * M_PI / 180));
-    private_nh_.param("ekf_control_noise_vel", sigmaUv, float(1.0));
+    private_nh_.param("ekf_control_noise_vel", sigmaUv, float(0.001));
     private_nh_.param("ekf_control_noise_steer", sigmaUst, float(1.0 * M_PI / 180));
-    private_nh_.param("ekf_gps_noise_x", sigmaZx, float(0.1));
-    private_nh_.param("ekf_gps_noise_y", sigmaZy, float(0.1));
+    private_nh_.param("ekf_gps_noise_x", sigmaZx, float(0.001));
+    private_nh_.param("ekf_gps_noise_y", sigmaZy, float(0.001));
     private_nh_.param("ekf_imu_noise_yaw", sigmaZth, float(1.0 * M_PI / 180));
 
     //initialise control noise covariance matrix
@@ -46,7 +46,14 @@ Eigen::Vector3f EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, flo
     Eigen::Matrix<float, 5, 5> pPred;
     Eigen::Matrix<float, 5, 5> jX;
 
+    std::cout << "measurement\n" << z << std::endl;
+
+    std::cout << "previous mean\n" << mu_ << std::endl;
+    std::cout << "control\n" << u << std::endl;
+    std::cout << "dt: " << dt << std::endl;
+    std::cout << "wheel base: " << wb << std::endl;
     xPred << motion_model(mu_, u, dt, wb);
+    std::cout << "prediction mean\n" << xPred << std::endl;
     jX << jacobian_position(mu_, u, dt, wb);
     pPred << jX * sigma_ * jX.transpose() + Q_;
 
@@ -63,6 +70,7 @@ Eigen::Vector3f EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, flo
     zPred << measurement_model(xPred, jZ);
     innov_seq << z - zPred;
     mu_ = xPred + K * innov_seq;
+    std::cout << "updated mean\n" << xPred << std::endl;
     sigma_ = (Eigen::Matrix<float, 5, 5>::Identity() - K * jZ) * pPred;
 
     Eigen::Vector3f position;
@@ -75,7 +83,7 @@ Eigen::Vector3f EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, flo
  * @param
  * @return
  */
- Eigen::Matrix<float, 5, 1> EKF::motion_model(const  Eigen::Matrix<float, 5, 1>& xEst, const Eigen::Vector2f& u, float dt, float wb)
+ Eigen::Matrix<float, 5, 1> EKF::motion_model(const Eigen::Matrix<float, 5, 1>& xEst, const Eigen::Vector2f& u, float dt, float wb)
 {
     //unpack the inputs
     float speed = u(0);
