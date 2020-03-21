@@ -12,11 +12,11 @@ public:
 
     /**
      * @brief Extended Kalman Filter step: prediction and measurement update (correction)
-     * @param u Eigen 2d vector describing the robot control input: linear velocity and steering angle
+     * @param u Eigen 2D vector describing the robot control input: linear velocity and steering angle
      * @param dt Change in time (seconds) from previous step
      * @param wb Wheel base of the car-like robot (difference between centres of front and rear wheels)
-     * @param z Eigen 3d vector describing the measurement: x and y GPS positions and IMU euler yaw orientation
-     * @return Eigen 3d vector describing the x, y and yaw pose values of the robot after EKF sensor fusion 
+     * @param z Eigen 3D vector describing the measurement: x and y GPS positions and IMU euler yaw orientation
+     * @return Eigen 3D vector describing the x, y and yaw pose values of the robot after EKF sensor fusion 
      */
     Eigen::Vector3f ekf_estimation_step(const Eigen::Vector2f& u, float dt, float wb, const  Eigen::Vector3f& z);
 
@@ -28,35 +28,35 @@ private:
 
     /**
      * @brief Using previous position and current robot control inputs, calculates the current predicted new position 
-     * @param xEst Eigen 5d vector describing the previous state of the robot [x y yaw linear_vel steering_angle]'
-     * @param u Eigen 2d vector describing the robot control input: linear velocity and steering angle
+     * @param xEst Eigen 5D vector describing the previous state of the robot [x y yaw linear_vel steering_angle]'
+     * @param u Eigen 2D vector describing the robot control input: linear velocity and steering angle
      * @param dt Change in time (seconds) from previous step
      * @param wb Wheel base of the car-like robot (difference between centres of front and rear wheels)
-     * @return Eigen 5d vector describing the new predicted state of the robot [x y yaw linear_vel steering_angle]'
+     * @return Eigen 5D vector describing the new predicted state of the robot [x y yaw linear_vel steering_angle]'
      */
      Eigen::Matrix<float, 5, 1> motion_model(const  Eigen::Matrix<float, 5, 1>& xEst, const Eigen::Vector2f& u, float dt, float wb);
 
     /**
      * @brief Maps the state vector from the prediction step to an observation
-     * @param xPred Eigen 5d vector describing the predicted state of the robot
-     * @param jZ Eigen 3-by-5 matrix describing Jacobian measurement matrix 
-     * @return Eigen 3d vector representing the predicted state mapped as an observation 
+     * @param xPred Eigen 5D vector describing the predicted state of the robot
+     * @param jZ Eigen 3x5 matrix describing Jacobian measurement matrix 
+     * @return Eigen 3D vector representing the predicted state mapped as an observation 
      */
      Eigen::Vector3f measurement_model(const  Eigen::Matrix<float, 5, 1>& xPred, const  Eigen::Matrix<float, 3, 5>& jZ);
 
     /**
      * @brief Returns the Jacobian matrix of the motion model derived from the differential drive equations for a car
-     * @param Eigen 5d vector representing the robot state vector
-     * @param u Eigen 2d vector describing the robot control input: linear velocity and steering angle
+     * @param Eigen 5D vector representing the robot state vector
+     * @param u Eigen 2D vector describing the robot control input: linear velocity and steering angle
      * @param dt Change in time (seconds) from previous step
      * @param wb Wheel base of the car-like robot (difference between centres of front and rear wheels)
-     * @return Eigen 5-by-5 matrix representing the Jacobian control matrix 
+     * @return Eigen 5x5 matrix representing the Jacobian control matrix 
      */
     Eigen::Matrix<float, 5, 5> jacobian_position(const  Eigen::Matrix<float, 5, 1>& x, const Eigen::Vector2f& u, float dt, float wb);
     
     /**
      * @brief Returns the jacobian matrix of the measurement model derived from GPS (x, y) and IMU (yaw) data input
-     * @return Eigen 5-by-5 matrix representing the Jacobian measurement matrix 
+     * @return Eigen 5x5 matrix representing the Jacobian measurement matrix 
      */
      Eigen::Matrix<float, 3, 5> jacobian_measurement();
 

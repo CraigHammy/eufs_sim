@@ -9,13 +9,6 @@ In relation to a body the standard is:
 x forward
 y left
 z up
-
-Suffix Frames
-In the case of cameras, there is often a second frame defined with a "_optical" suffix. This uses a slightly different convention:
-
-z forward
-x right
-y down
 */
 
 class WorldFrameBroadcaster

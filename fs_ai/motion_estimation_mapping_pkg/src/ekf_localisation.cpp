@@ -35,11 +35,11 @@ void EKF::initialise()
 
 /**
  * @brief Extended Kalman Filter step: prediction and measurement update (correction)
- * @param u Eigen 2d vector describing the robot control input: linear velocity and steering angle
+ * @param u Eigen 2D vector describing the robot control input: linear velocity and steering angle
  * @param dt Change in time (seconds) from previous step
  * @param wb Wheel base of the car-like robot (difference between centres of front and rear wheels)
- * @param z Eigen 3d vector describing the measurement: x and y GPS positions and IMU euler yaw orientation
- * @return Eigen 3d vector describing the x, y and yaw pose values of the robot after EKF sensor fusion 
+ * @param z Eigen 3D vector describing the measurement: x and y GPS positions and IMU euler yaw orientation
+ * @return Eigen 3D vector describing the x, y and yaw pose values of the robot after EKF sensor fusion 
  */
 Eigen::Vector3f EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, float wb, const Eigen::Vector3f& z)
 {
@@ -68,7 +68,7 @@ Eigen::Vector3f EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, flo
     std::cout << "updated mean\n" << xPred << std::endl;
     sigma_ = (Eigen::Matrix<float, 5, 5>::Identity() - K * jZ) * pPred;
 
-    //create 3d vector to pass it to the 3d vector of the mean of the FastSLAM algorithm 
+    //create 3D vector to pass it to the 3D vector of the mean of the FastSLAM algorithm 
     Eigen::Vector3f position;
     position << mu_(0), mu_(1), mu_(2);
     return position;
@@ -76,11 +76,11 @@ Eigen::Vector3f EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, flo
 
 /**
  * @brief Using previous position and current robot control inputs, calculates the current predicted new position 
- * @param xEst Eigen 5d vector describing the previous state of the robot [x y yaw linear_vel steering_angle]'
- * @param u Eigen 2d vector describing the robot control input: linear velocity and steering angle
+ * @param xEst Eigen 5D vector describing the previous state of the robot [x y yaw linear_vel steering_angle]'
+ * @param u Eigen 2D vector describing the robot control input: linear velocity and steering angle
  * @param dt Change in time (seconds) from previous step
  * @param wb Wheel base of the car-like robot (difference between centres of front and rear wheels)
- * @return Eigen 5d vector describing the new predicted state of the robot [x y yaw linear_vel steering_angle]'
+ * @return Eigen 5D vector describing the new predicted state of the robot [x y yaw linear_vel steering_angle]'
  */
  Eigen::Matrix<float, 5, 1> EKF::motion_model(const Eigen::Matrix<float, 5, 1>& xEst, const Eigen::Vector2f& u, float dt, float wb)
 {
@@ -101,9 +101,9 @@ Eigen::Vector3f EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, flo
 
 /**
  * @brief Maps the state vector from the prediction step to an observation
- * @param xPred Eigen 5d vector describing the predicted state of the robot
- * @param jZ Eigen 3-by-5 matrix describing Jacobian measurement matrix 
- * @return Eigen 3d vector representing the predicted state mapped as an observation 
+ * @param xPred Eigen 5D vector describing the predicted state of the robot
+ * @param jZ Eigen 3x5 matrix describing Jacobian measurement matrix 
+ * @return Eigen 3D vector representing the predicted state mapped as an observation 
  */
  Eigen::Vector3f EKF::measurement_model(const Eigen::Matrix<float, 5, 1>& xPred, const Eigen::Matrix<float, 3, 5>& jZ)
 {
@@ -114,11 +114,11 @@ Eigen::Vector3f EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, flo
 
 /**
  * @brief Returns the Jacobian matrix of the motion model derived from the differential drive equations for a car
- * @param Eigen 5d vector representing the robot state vector
- * @param u Eigen 2d vector describing the robot control input: linear velocity and steering angle
+ * @param Eigen 5D vector representing the robot state vector
+ * @param u Eigen 2D vector describing the robot control input: linear velocity and steering angle
  * @param dt Change in time (seconds) from previous step
  * @param wb Wheel base of the car-like robot (difference between centres of front and rear wheels)
- * @return Eigen 5-by-5 matrix representing the Jacobian control matrix 
+ * @return Eigen 5x5 matrix representing the Jacobian control matrix 
  */
 Eigen::Matrix<float, 5, 5> EKF::jacobian_position(const Eigen::Matrix<float, 5, 1>& x, const Eigen::Vector2f& u, float dt, float wb)
 {
@@ -127,7 +127,7 @@ Eigen::Matrix<float, 5, 5> EKF::jacobian_position(const Eigen::Matrix<float, 5, 
     float steering_angle = u(1);
     float current_yaw = x(2);
 
-    //create 5-by-5 Jacobian matrix from state vector [x y yaw linear_vel steering_angle]'
+    //create 5x5 Jacobian matrix from state vector [x y yaw linear_vel steering_angle]'
     Eigen::Matrix<float, 5, 5> jX;
     jX << 1, 0, 0,  dt * cosf(current_yaw), -speed * dt * sinf(current_yaw),
           0, 1, 0, dt * sinf(current_yaw), speed * dt * cosf(current_yaw),
@@ -139,7 +139,7 @@ Eigen::Matrix<float, 5, 5> EKF::jacobian_position(const Eigen::Matrix<float, 5, 
 
 /**
  * @brief Returns the jacobian matrix of the measurement model derived from GPS (x, y) and IMU (yaw) data input
- * @return Eigen 5-by-5 matrix representing the Jacobian measurement matrix 
+ * @return Eigen 5x5 matrix representing the Jacobian measurement matrix 
  */
 Eigen::Matrix<float, 3, 5> EKF::jacobian_measurement()
 {

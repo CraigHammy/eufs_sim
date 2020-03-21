@@ -28,8 +28,8 @@ std::time_t now = std::time(0);
 boost::random::mt19937 rng(static_cast<uint32_t>(now));
 
 /**
- * @brief State estimation prediction based on odometric and robot control state data
- * @param current_pose A RobotPose object, describing the current pose estimate
+ * @brief State estimation prediction based on odometric and robot input control data
+ * @param current_pose An Eigen 3D vector, describing the current pose estimate
  * @param speed The current linear speed of the robot
  * @param steer The current steering angle of the robot
  * @param wb The wheelbase of the differential-drive robot, the distance between the centres of the front and rear wheels
@@ -56,15 +56,16 @@ void Particle::motionUpdate(const Eigen::Vector3f& current_pose, float speed, fl
 
 
 /**
- * @brief Perform correction step on a particle
- * @param observations List of Cone messages
+ * @brief Determines whether the observation is an unknown or known feature, and performs data association on it if is known
+ * @param z A Cone message 
  * @param current_pose A RobotPose object
+ * @param R Eigen 2x2 covariance matrix of measurement noise
  * @param slam_phase The phase (mapping or localization) the car is currently executing
  */
-void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f& current_pose, const Eigen::Matrix2f& R, const Eigen::Matrix2f& Q, SLAM_PHASE slam_phase)
+void Particle::measurementUpdate(const perception_pkg::Cone& z, const Eigen::Matrix2f& R, SLAM_PHASE slam_phase)
 {
 
-    boost::shared_ptr<geometry_msgs::Point> z_ptr(new geometry_msgs::Point((z).location));
+    boost::shared_ptr<geometry_msgs::Point> z_ptr(new geometry_msgs::Point(z.location));
     Eigen::Vector2f measurement(getMeasurement(z_ptr));
 
     //assume the observations received are all unique and not repeated
@@ -83,6 +84,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
     float best_p = 0;
     int best_arg = 0;
 
+    //iterating over all landmarks
     int i = 0;
     std::vector<Landmark>::const_iterator lm;
     for(lm = landmarks_.begin(); lm != landmarks_.end(); ++lm, ++i)
@@ -110,16 +112,12 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
     }
 
     Eigen::Vector2f map_feature(z.location.x + mu_(0), z.location.y + mu_(1));
-    //std::cout << "distance: " << (map_feature - landmarks_.at(best_arg).mu_).norm() << std::endl;
-    //std::cout << "data association value:" << best_p << std::endl;
-
     if ((best_p < 0.0000001) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.25))
     {
         DataAssociation d;
         d.measurement = measurement;
         d.landmark_id = best_arg;
         unknown_features_.push_back(d);
-        //ROS_ERROR("new feature");
     }
     else
     {
@@ -127,7 +125,6 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
         d.measurement = measurement;
         d.landmark_id = best_arg;
         known_features_.push_back(d);
-        //ROS_ERROR("known feature");
     }
 
     if (slam_phase == MAP_BUILDING) {
@@ -140,7 +137,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, Eigen::Vector3f&
 
 /**
  * @brief Adds new landmark to the list of landmarks associated to the particle
- * @param ob A 2D vector describing the euclidean distance and yaw angle to the landmark
+ * @param ob Eigen 2D vector describing the euclidean distance and yaw angle to the landmark
  * @param colour The colour of the cone landmark
  * @param R Eigen 2x2 covariance matrix of measurement noise
  */
@@ -187,31 +184,10 @@ float Particle::calculateWeight(const Eigen::Vector2f& innov_mean, const Eigen::
     //calculates the weight of the particle with the current landmark and observation
     Eigen::Matrix2f L;
     L << (Hv * sigma_ * Hv.transpose()) + (Hl * lm_sigma * Hl.transpose()) + R;
-    //std::cout << "L\n" << std::endl;
     float numerator = expf(-0.5 * innov_mean.transpose() * L.inverse() * innov_mean);
-    //std::cout << "numerator: " << numerator << std::endl;
     float denominator =  1 /  sqrtf(2.0 * M_PI * L.determinant());
-    //std::cout << "denominator: " << denominator << std::endl;
     float weight = numerator / denominator;
-    //std::cout << "weight " << weight << std::endl;
     return weight;
-}
-
-/**
- * @brief Updates the state and covariance of the landmark
- * @param lm A Landmark object
- * @param H Jacobian matrix of landmark observation
- * @param innov_cov Eigen 2x2 innovation covariance matrix of observed landmark
- * @param innov_mean Eigen 2x1 innovation mean vector of observed landmark
- */
-void Particle::updateLandmark(Landmark& lm, const Eigen::Matrix2f& H, const Eigen::Matrix2f& innov_cov, const Eigen::Vector2f& innov_mean)
-{
-    //Calculate the EKF update given the prior state, the innovation and the linearised observation model
-    Eigen::Matrix2f K(lm.sigma_ * H.transpose() * innov_cov.inverse());
-
-    //update the mean and covariance of the landmark
-    lm.mu_ += (K * innov_mean);
-    lm.sigma_ *= (Eigen::Matrix2f::Identity() - (K * H));
 }
 
 /**
@@ -223,8 +199,8 @@ void Particle::updateLandmark(Landmark& lm, const Eigen::Matrix2f& H, const Eige
  */
 void Particle::updateLandmarkWithCholesky(Landmark& lm, const Eigen::Matrix2f& H, const Eigen::Matrix2f& innov_cov, const Eigen::Vector2f& innov_mean)
 {
-    //Calculate the EKF update given the prior state, the innovation and the linearised observation model
-    //the Cholesky factorisation is used because more numerically stable than a naive implementation
+    //the Cholesky factorisation is used because it is more numerically stable than a naive implementation
+    //it is usually used to avoid performing the inverse of a matrix, as it is a very costly operation 
 
     //make the matrix symmetric
     Eigen::Matrix2f S((innov_cov + innov_cov.transpose()) * 0.5);
@@ -241,40 +217,38 @@ void Particle::updateLandmarkWithCholesky(Landmark& lm, const Eigen::Matrix2f& H
 }
 
 
-
 /**
- * @brief Checks if current landmark is the same as a previously observed landmark
- * @param lm A Landmark object
- * @param landmarks_to_check List of Landmark objects to check against
+ * @brief Checks if two landmarks are the same based on their colour and euclidean distance between them
+ * @param lm1 First Landmark object
+ * @param lm2 Second Landmark object
  * @return True if any stored landmark has the same colour and distance less than 20cm from lm
  */
-bool Particle::sameLandmark(const Landmark& lm, const std::vector<Landmark>& landmarks_to_check)
+bool Particle::sameLandmark(const Landmark& lm1, const Landmark& lm2)
 {
-    std::vector<Landmark>::const_iterator landmark;
-    for(landmark = landmarks_to_check.begin(); landmark != landmarks_to_check.end(); ++landmark)
-    {
-        //could end up checking against itself-> fix this
-        if (((*landmark).colour_ == lm.colour_) && ((*landmark).mu_ - lm.mu_).norm() <= 0.20)
-            return true;
-    }
-    return false;
+    return ((lm1.colour_ == lm2.colour_) && (lm1.mu_ - lm2.mu_).norm() <= 0.20);
 }
 
 /**
- *
+ * @brief Generates data association value: the higher the value, the more probable that the observation corresponds to the landmark
+ * @param lm_innov_cov Eigen 2x2 innovation covariance matrix of observed landmark
+ * @param lm_innov_mean Eigen 2x1 innovation mean vector of observed landmark
+ * @param Hv Eigen 2x3 Jacobian matrix with respect to the robot location
+ * @param zt Eigen 2x1 measurement vector from robot pose to landmark
+ * @param z A Cone message 
+ * @param lm A Landmark object
+ * @param R Eigen 2x2 covariance matrix of measurement noise
+ * @return Data association value
  */
-float Particle::dataAssociations(const Eigen::Matrix2f& lm_innov_cov, const Eigen::Vector2f& lm_innov_mean, const Eigen::Matrix<float, 2, 3>& Hv, const Eigen::Vector2f& zt, const perception_pkg::Cone& ob, const Landmark& lm, const Eigen::Matrix2f& R)
+float Particle::dataAssociations(const Eigen::Matrix2f& lm_innov_cov, const Eigen::Vector2f& lm_innov_mean, const Eigen::Matrix<float, 2, 3>& Hv, const Eigen::Vector2f& zt, const perception_pkg::Cone& z, const Landmark& lm, const Eigen::Matrix2f& R)
 {
     //Cholesky decomposition of the covariance, which is by definition definite and symmetric
     Eigen::Matrix3f cholesky_L = sigma_.llt().matrixL();
 
-    //uniform distribution object
-
-    //BETWEEN 0 AND 1 OR -1 AND 1 ????
+    //uniform distribution 
     boost::random::uniform_real_distribution<float> distribution(0.0, 1.0);
 
     //add sample taken from updated distribution to particle
-    boost::shared_ptr<geometry_msgs::Point> z_ptr(new geometry_msgs::Point(ob.location));
+    boost::shared_ptr<geometry_msgs::Point> z_ptr(new geometry_msgs::Point(z.location));
     Eigen::Vector2f measurement(getMeasurement(z_ptr));
     Innovation inn(computeInnovations(mu_, sigma_, lm, R));
     Eigen::Vector2f new_innov_mean(measurement - inn.predicted_observation);
@@ -287,12 +261,9 @@ float Particle::dataAssociations(const Eigen::Matrix2f& lm_innov_cov, const Eige
 }
 
 /**
- * @brief Generates a proposal distribution using an observation and samples a pose from it
- * @param lm_innov_cov Eigen 2x2 innovation covariance matrix of observed landmark
- * @param lm_innov_mean Eigen 2x1 innovation mean vector of observed landmark
- * @param Hv Eigen 2x3 Jaocbian matrix with respect to robot location
- * @param zt Eigen 2x1 measurement vector from robot pose to landmark
- * @return Data association value
+ * @brief Generates a proposal distribution using the observations of the known features and samples a pose from it
+ * @param known_features Vector of DataAssociation values corresponding to known features from newly observed cones 
+ * @param R Eigen 2x2 covariance matrix of measurement noise
  */
 void Particle::proposalSampling(const std::vector<DataAssociation> known_features, const Eigen::Matrix2f& R)
 {
@@ -328,9 +299,10 @@ void Particle::proposalSampling(const std::vector<DataAssociation> known_feature
 }
 
 /**
- * @brief
- * @param
- * @return
+ * @brief One step towards the generation of the proposal distribution using only one of the known feature data associations 
+ * @param lm_innov_cov Eigen 2x2 innovation covariance matrix of observed landmark
+ * @param lm_innov_mean Eigen 2x1 innovation mean vector of observed landmark
+ * @param Hv Eigen 2x3 Jacobian matrix with respect to the robot location
  */
 void Particle::proposalDistribution(const Eigen::Matrix2f& lm_innov_cov, const Eigen::Vector2f& lm_innov_mean, const Eigen::Matrix<float, 2, 3>& Hv)
 {

@@ -3,10 +3,16 @@
 #include "fast_slam.hpp"
 #include <Eigen/Dense>
 #include <ros/ros.h>
+#include <cmath>
+#include <vector>
+#include <deque>
+#include <algorithm>
+#include <string>
+#include <iostream>
+#include <stdint.h>
+#include <ctime>
 #include <geometry_msgs/Point.h>
-#include <sensor_msgs/JointState.h>
 #include <nav_msgs/Odometry.h>
-#include <ackermann_msgs/AckermannDriveStamped.h>
 #include <nav_msgs/Path.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Pose.h>
@@ -14,14 +20,6 @@
 #include <eufs_msgs/WheelSpeedsStamped.h>
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
-#include <cmath>
-#include <vector>
-#include <algorithm>
-#include <string>
-#include <iostream>
-#include <stdint.h>
-#include <ctime>
-#include <fstream>
 #include <actionlib/client/simple_action_client.h>
 #include <actionlib/client/terminal_state.h>
 #include <motion_estimation_mapping_pkg/FastSlamAction.h>
@@ -99,7 +97,27 @@ void StateEstimation::initialiseSubscribers()
     //ground_truth_cone_sub_ = nh_.subscribe<visualization_msgs::MarkerArray>("/ground_truth/cones/viz", 1, boost::bind(&StateEstimation::groundTruthConeCallback, this, _1));
     gps_sub_ = nh_.subscribe<geodetic_to_enu_conversion_pkg::Gps>("/odometry/gps", 1, boost::bind(&StateEstimation::gpsCallback, this, _1));
     imu_sub_ = nh_.subscribe<sensor_msgs::Imu>("/imu", 1, boost::bind(&StateEstimation::imuCallback, this, _1));
-}   
+}
+
+/**
+ * @brief Callback function executes the goal it is passed 
+ * @param goal FastSlamGoal pointer to the goal message sent to the action servee
+ */
+void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoal::ConstPtr& goal)
+{
+    EKF ekf(&private_nh_);
+
+    while(!lap_closure_detected_)
+    {
+        if (start_)
+        {
+            prediction(ekf);
+            //correction(MAP_BUILDING);
+            calculateFinalEstimate();
+            //resampling();
+        }
+    }
+}
 
 /**
  * @brief Normalizes the particle weights
@@ -155,8 +173,8 @@ void StateEstimation::wheelSpeedCallback(const eufs_msgs::WheelSpeedsStamped::Co
 void StateEstimation::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
     //odometry posiion x and y
-    pose_(0) = msg->pose.pose.position.x;
-    pose_(1) = msg->pose.pose.position.y;
+    ground_truth_(0) = msg->pose.pose.position.x;
+    ground_truth_(1) = msg->pose.pose.position.y;
 
     //transform yaw from quaternion to euler 
     tf::Quaternion q(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, 
@@ -164,15 +182,15 @@ void StateEstimation::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
     double roll, pitch, yaw;
     tf::Matrix3x3 m(q);
     m.getRPY(roll, pitch, yaw);
-    pose_(2) = yaw;
+    ground_truth_(2) = yaw;
 
     //store retrieved pose into Path message and publish it 
     geometry_msgs::PoseStamped current_pose;
-    current_pose.pose.position.x = pose_(0);
-    current_pose.pose.position.y = pose_(1);
+    current_pose.pose.position.x = ground_truth_(0);
+    current_pose.pose.position.y = ground_truth_(1);
     current_pose.pose.position.z = 0;
     tf2::Quaternion orientation;
-    orientation.setRPY(0, 0, pose_(2));
+    orientation.setRPY(0, 0, ground_truth_(2));
 
     current_pose.header.frame_id = "track";
     current_pose.header.stamp = ros::Time::now();
@@ -315,7 +333,7 @@ void StateEstimation::prediction(EKF& ekf)
         p->mu_ = ekf.ekf_estimation_step(u, dt, wheel_base_, z);
         p->sigma_ = Gx * p->sigma_ * Gx.transpose() + Gu * Q_ * Gu.transpose();
 
-        //p->motionUpdate(ekf, pose_, speed, steering_angle, wheel_base_, dt, z, Gx, Gu, Q_);
+        //p->motionUpdate(ekf, ground_truth_, speed, steering_angle, wheel_base_, dt, z, Gx, Gu, Q_);
 
         //add the motion model pose to a Path message and publish it 
         geometry_msgs::PoseStamped current_pose;
@@ -351,8 +369,8 @@ void StateEstimation::correction(SLAM_PHASE slam_phase)
     {
         for (p = particles_.begin(); p != particles_.end(); ++p)
         {
-            //data association association step
-            p->measurementUpdate(*z, pose_, R_, Q_, slam_phase);
+            //divide unknown from known features and perform data association on known features
+            p->measurementUpdate(*z, R_, slam_phase);
         }
     }
     
