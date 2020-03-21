@@ -8,70 +8,71 @@
 class EKF
 {
 public:
-    EKF(ros::NodeHandle* private_nh): private_nh_(*private_nh) {};
+    EKF(ros::NodeHandle* private_nh): private_nh_(*private_nh) {initialise();};
 
     /**
-     * @brief
-     * @param
-     * @return
+     * @brief Extended Kalman Filter step: prediction and measurement update (correction)
+     * @param u Eigen 2d vector describing the robot control input: linear velocity and steering angle
+     * @param dt Change in time (seconds) from previous step
+     * @param wb Wheel base of the car-like robot (difference between centres of front and rear wheels)
+     * @param z Eigen 3d vector describing the measurement: x and y GPS positions and IMU euler yaw orientation
+     * @return Eigen 3d vector describing the x, y and yaw pose values of the robot after EKF sensor fusion 
+     */
+    Eigen::Vector3f ekf_estimation_step(const Eigen::Vector2f& u, float dt, float wb, const  Eigen::Vector3f& z);
+
+private:
+    /**
+     * @brief Initialises parameters and variables needed for the Extended Kalman Filter
      */
     void initialise();
 
     /**
-     * @brief
-     * @param
-     * @return
-     */
-    Eigen::Vector3f ekf_estimation_step(const Eigen::Vector2f& u, float dt, float wb, const  Eigen::Vector3f& z);
-
-    /**
-     * @brief
-     * @param
-     * @return
-     */
-    Eigen::Matrix<float, 5, 5> jacobian_position(const  Eigen::Matrix<float, 5, 1>& x, const Eigen::Vector2f& u, float dt, float wb);
-
-    /**
-     * @brief
-     * @param
-     * @return
-     */
-     Eigen::Matrix<float, 3, 5> jacobian_measurement();
-
-    /**
-     * @brief
-     * @param
-     * @return
+     * @brief Using previous position and current robot control inputs, calculates the current predicted new position 
+     * @param xEst Eigen 5d vector describing the previous state of the robot [x y yaw linear_vel steering_angle]'
+     * @param u Eigen 2d vector describing the robot control input: linear velocity and steering angle
+     * @param dt Change in time (seconds) from previous step
+     * @param wb Wheel base of the car-like robot (difference between centres of front and rear wheels)
+     * @return Eigen 5d vector describing the new predicted state of the robot [x y yaw linear_vel steering_angle]'
      */
      Eigen::Matrix<float, 5, 1> motion_model(const  Eigen::Matrix<float, 5, 1>& xEst, const Eigen::Vector2f& u, float dt, float wb);
 
     /**
-     * @brief
-     * @param
-     * @return
+     * @brief Maps the state vector from the prediction step to an observation
+     * @param xPred Eigen 5d vector describing the predicted state of the robot
+     * @param jZ Eigen 3-by-5 matrix describing Jacobian measurement matrix 
+     * @return Eigen 3d vector representing the predicted state mapped as an observation 
      */
      Eigen::Vector3f measurement_model(const  Eigen::Matrix<float, 5, 1>& xPred, const  Eigen::Matrix<float, 3, 5>& jZ);
 
+    /**
+     * @brief Returns the Jacobian matrix of the motion model derived from the differential drive equations for a car
+     * @param Eigen 5d vector representing the robot state vector
+     * @param u Eigen 2d vector describing the robot control input: linear velocity and steering angle
+     * @param dt Change in time (seconds) from previous step
+     * @param wb Wheel base of the car-like robot (difference between centres of front and rear wheels)
+     * @return Eigen 5-by-5 matrix representing the Jacobian control matrix 
+     */
+    Eigen::Matrix<float, 5, 5> jacobian_position(const  Eigen::Matrix<float, 5, 1>& x, const Eigen::Vector2f& u, float dt, float wb);
+    
+    /**
+     * @brief Returns the jacobian matrix of the measurement model derived from GPS (x, y) and IMU (yaw) data input
+     * @return Eigen 5-by-5 matrix representing the Jacobian measurement matrix 
+     */
+     Eigen::Matrix<float, 3, 5> jacobian_measurement();
 
-private:
-    //private node handle
+    //private NodeHandle
     ros::NodeHandle private_nh_;
 
-    //parameters 
-    float sigmaUx;
-    float sigmaUy;
-    float sigmaUth;
-    float sigmaUv;
-    float sigmaUst;
-    float sigmaZx;
-    float sigmaZy;
-    float sigmaZth;
+    //parameters to generate the control and measurement noise matrices 
+    float sigmaUx, sigmaUy, sigmaUth;
+    float sigmaUv, sigmaUst;
+    float sigmaZx, sigmaZy, sigmaZth;
 
     //mean and covariance of the Extended Kalman Filter
      Eigen::Matrix<float, 5, 1> mu_;
      Eigen::Matrix<float, 5, 5> sigma_;
 
-    //process and measurement noise 
+    //process and measurement noise matrices
      Eigen::Matrix<float, 5, 5> Q_;
      Eigen::Matrix3f R_;
 };

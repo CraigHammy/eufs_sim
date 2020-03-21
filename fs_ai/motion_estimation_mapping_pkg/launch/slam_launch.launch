@@ -10,10 +10,26 @@
     <include file="$(find geodetic_to_enu_conversion_pkg)/launch/conversion_launcher.launch"/>
 
     <node pkg="motion_estimation_mapping_pkg" type="fast_slam" name="slam_server" output="screen">
-        <param name="max_speed" type="double" value="20.0"/>
-        <param name="max_steering" type="double" value="0.45"/>
-        <param name="wheel_base" type="double" value="1.53"/>
-        <param name="wheel_diameter" type="double" value="0.505"/>
+        <param name="max_speed"       type="double" value="20.0"/>
+        <param name="max_steering"    type="double" value="0.523599"/> <!-- 27.2 degs -->
+        <param name="wheel_base"      type="double" value="1.53"/>
+        <param name="wheel_diameter"  type="double" value="0.505"/>
+
+        <param name="slam_control_noise_velocity"               type="double" value="1.0"/>
+        <param name="slam_control_noise_steering_angle"         type="double" value="2.5"/>
+        <param name="slam_measurement_noise_euclidean_distance" type="double" value="0.5"/>
+        <param name="slam_measurement_noise_angle_difference"   type="double" value="2.5"/>
+
+        <param name="resampling_ratio_particles"                type="double" value="0.75"/>
+
+        <param name="ekf_control_noise_x"       type="double" value="0.001"/>
+        <param name="ekf_control_noise_y"       type="double" value="0.001"/>
+        <param name="ekf_control_noise_yaw"     type="double" value="1.0"/>
+        <param name="ekf_control_noise_vel"     type="double" value="0.001"/>
+        <param name="ekf_control_noise_steer"   type="double" value="1.0"/>
+        <param name="ekf_gps_noise_x"           type="double" value="0.001"/>
+        <param name="ekf_gps_noise_y"           type="double" value="0.001"/>
+        <param name="ekf_imu_noise_yaw"         type="double" value="1.0"/>
     </node>
 
     <node pkg="motion_estimation_mapping_pkg" type="action_client" name="slam_client" output="screen"/>

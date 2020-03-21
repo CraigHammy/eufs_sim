@@ -1,5 +1,5 @@
-#ifndef FAST_SLAM_ROS_HEADER
-#define FAST_SLAM_ROS_HEADER
+#ifndef FAST_SLAM2_ROS_HEADER
+#define FAST_SLAM2_ROS_HEADER
 
 #include <Eigen/Dense>
 #include <nav_msgs/Odometry.h>
@@ -31,6 +31,7 @@ public:
         num_particles_resampling_(num_particles / 1.5), pose_(Eigen::Vector3f::Zero()), private_nh_("~"), nh_(*nh), action_name_(name),
          as_(*nh, name, boost::bind(&StateEstimation::executeCB, this, _1), false)
         {
+            initialise();
             as_.start();
 
             for (int i = 0; i != num_particles; ++i)
@@ -43,37 +44,32 @@ public:
     void executeCB(const motion_estimation_mapping_pkg::FastSlamGoal::ConstPtr& goal)
     {
         EKF ekf(&private_nh_);
-        ekf.initialise();
-        
-        initialise();
 
-        while(ros::ok())
+        while(!lap_closure_detected_)
         {
             if (start_)
             {
                 prediction(ekf);
-                correction(MAP_BUILDING);
+                //correction(MAP_BUILDING);
                 calculateFinalEstimate();
-                resampling();
+                //resampling();
             }
         }
     }
 
-    ros::Time last_time_, current_time_;
-
     /**
-     * @brief Initialise a StateEstimation object and the Particles objects
+     * @brief Initialises the StateEstimation object with parameters, publishers and subscribers needed for FastSLAM
      */
     void initialise();
     
     /**
      * @brief Sampling step: applying the motion model to every particle
+     * @param ekf EKF class object reference used to apply the Extended Kalman Filter step for the motion model
      */
     void prediction(EKF& ekf);
 
     /**
      * @brief Correction step: applying the measurement model to every particle
-     * @param observations A list of Cone messages 
      * @param slam_phase The phase (mapping or localization) the car is currently executing 
      */
     void correction(SLAM_PHASE slam_phase);
@@ -97,8 +93,14 @@ private:
      */
     void addNewLandmark();
 
+    /**
+     * @brief Initialises subscribers needed for the FastSLAM2.0 algorithm 
+     */
     void initialiseSubscribers();
 
+    /**
+     * @brief Initialises publishers needed for the FastSLAM2.0 algorithm 
+     */
     void initialisePublishers();
 
     /**
@@ -113,19 +115,11 @@ private:
     void odomCallback(const nav_msgs::Odometry::ConstPtr& msg);
 
     /**
-     * @brief Callback for receiving command data
-     * @param msg An AckermannDriveStamped message
+     * @brief Callback for receiving ground truth cone location data
+     * @param msg A MarkerArray message
      */
-    void commandCallback(const ackermann_msgs::AckermannDriveStamped::ConstPtr& msg);
-
-    /**
-     * @brief Callback for receiving joint state data
-     * @param msg A JointState message
-     */
-    void jointStateCallback(const sensor_msgs::JointState::ConstPtr& msg);
-
-
     void groundTruthConeCallback(const visualization_msgs::MarkerArray::ConstPtr& msg);
+
     /**
      * @brief Callback for receiving detected Cone data
      * @param msg A Cone message
@@ -176,6 +170,8 @@ private:
     float wheel_diameter_;
     float max_speed_;
     float max_steering_;
+
+    ros::Time last_time_, current_time_;
 
     //FastSLAM configuration parameters  
     const int num_particles_;
@@ -235,6 +231,10 @@ private:
     //GPS x and y locations, and IMU yaw euler orientation
     float gps_x_, gps_y_;
     float imu_yaw_;
+
+    //control and measurement noise covariance matrix coefficients
+    float sigmaV, sigmaG;
+    float sigmaR, sigmaB;
     
 };
 

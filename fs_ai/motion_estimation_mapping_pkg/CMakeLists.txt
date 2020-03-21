@@ -136,6 +136,10 @@ add_library(ekf_localisation
   src/ekf_localisation.cpp
 )
 
+add_library(particle
+  src/particle.cpp
+)
+
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
@@ -145,7 +149,6 @@ add_library(ekf_localisation
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 #add_executable(findWayPoints src/findWayPoints.cpp)
-#add_executable(generateCostMap src/generateCostMap.cpp)
 add_executable(global_frame_broadcaster src/global_frame_broadcaster.cpp)
 add_executable(fast_slam src/fast_slam.cpp)
 add_executable(action_client src/action_client.cpp)
@@ -160,7 +163,6 @@ add_executable(gps_imu_tests src/gps_imu_tests.cpp)
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 #add_dependencies(findWayPoints ${findWayPoints_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-#add_dependencies(generateCostMap ${generateCostMap_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(global_frame_broadcaster ${global_frame_broadcaster_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(fast_slam ${fast_slam_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(action_client ${action_client_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
@@ -170,14 +172,11 @@ add_dependencies(gps_imu_tests ${gps_imu_tests_EXPORTED_TARGETS} ${catkin_EXPORT
 #target_link_libraries(findWayPoints
 #  ${catkin_LIBRARIES}
 #)
-#target_link_libraries(generateCostMap
-#  ${catkin_LIBRARIES}
-#)
 target_link_libraries(global_frame_broadcaster
   ${catkin_LIBRARIES}
 )
 target_link_libraries(fast_slam
-  ${catkin_LIBRARIES} ekf_localisation
+  ${catkin_LIBRARIES} ekf_localisation particle
 )
 target_link_libraries(action_client
   ${catkin_LIBRARIES}
