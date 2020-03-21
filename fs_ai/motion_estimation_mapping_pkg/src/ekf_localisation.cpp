@@ -39,9 +39,9 @@ void EKF::initialise()
  * @param dt Change in time (seconds) from previous step
  * @param wb Wheel base of the car-like robot (difference between centres of front and rear wheels)
  * @param z Eigen 3D vector describing the measurement: x and y GPS positions and IMU euler yaw orientation
- * @return Eigen 3D vector describing the x, y and yaw pose values of the robot after EKF sensor fusion 
+ * @return Eigen 3D vectors describing the x, y and yaw pose values of the robot after the motion model and after EKF sensor fusion 
  */
-Eigen::Vector3f EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, float wb, const Eigen::Vector3f& z)
+Estimates EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, float wb, const Eigen::Vector3f& z)
 {
     //prediction step
     Eigen::Matrix<float, 5, 1> xPred;
@@ -68,10 +68,14 @@ Eigen::Vector3f EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, flo
     std::cout << "updated mean\n" << xPred << std::endl;
     sigma_ = (Eigen::Matrix<float, 5, 5>::Identity() - K * jZ) * pPred;
 
-    //create 3D vector to pass it to the 3D vector of the mean of the FastSLAM algorithm 
-    Eigen::Vector3f position;
-    position << mu_(0), mu_(1), mu_(2);
-    return position;
+    //create 3D vectors to pass prediction and correction state vectors to the FastSLAM2.0 algorithm 
+    Estimates e;
+    Eigen::Vector3f xEst, xPred3D;
+    xEst << mu_(0), mu_(1), mu_(2);
+    xPred3D << xPred(0), xPred(1), xPred(2);
+    e.xPred = xPred3D;
+    e.xEst = xEst;
+    return e;
 }
 
 /**
@@ -82,7 +86,7 @@ Eigen::Vector3f EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, flo
  * @param wb Wheel base of the car-like robot (difference between centres of front and rear wheels)
  * @return Eigen 5D vector describing the new predicted state of the robot [x y yaw linear_vel steering_angle]'
  */
- Eigen::Matrix<float, 5, 1> EKF::motion_model(const Eigen::Matrix<float, 5, 1>& xEst, const Eigen::Vector2f& u, float dt, float wb)
+Eigen::Matrix<float, 5, 1> EKF::motion_model(const Eigen::Matrix<float, 5, 1>& xEst, const Eigen::Vector2f& u, float dt, float wb)
 {
     //unpack the inputs
     float speed = u(0);
@@ -105,7 +109,7 @@ Eigen::Vector3f EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, flo
  * @param jZ Eigen 3x5 matrix describing Jacobian measurement matrix 
  * @return Eigen 3D vector representing the predicted state mapped as an observation 
  */
- Eigen::Vector3f EKF::measurement_model(const Eigen::Matrix<float, 5, 1>& xPred, const Eigen::Matrix<float, 3, 5>& jZ)
+Eigen::Vector3f EKF::measurement_model(const Eigen::Matrix<float, 5, 1>& xPred, const Eigen::Matrix<float, 3, 5>& jZ)
 {
     Eigen::Vector3f z;
     z << jZ * xPred;

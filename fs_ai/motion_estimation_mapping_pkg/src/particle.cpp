@@ -112,7 +112,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, const Eigen::Mat
     }
 
     Eigen::Vector2f map_feature(z.location.x + mu_(0), z.location.y + mu_(1));
-    if ((best_p < 0.0000001) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.25))
+    if ((best_p < NEW_LANDMARK_THRESH) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.25))
     {
         DataAssociation d;
         d.measurement = measurement;

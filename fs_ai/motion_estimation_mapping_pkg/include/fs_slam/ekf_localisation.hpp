@@ -5,9 +5,22 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
+/**
+ * @brief Struct storing the motion model prediction and the measurement model correction robot states
+ */
+struct Estimates
+{
+    Eigen::Vector3f xPred;
+    Eigen::Vector3f xEst;
+};
+
+// EXTENDED KALMAN FILTER CLASS
 class EKF
 {
 public:
+    /**
+     * @brief Constructor for the Extende Kalman Filter class
+     */
     EKF(ros::NodeHandle* private_nh): private_nh_(*private_nh) {initialise();};
 
     /**
@@ -16,9 +29,9 @@ public:
      * @param dt Change in time (seconds) from previous step
      * @param wb Wheel base of the car-like robot (difference between centres of front and rear wheels)
      * @param z Eigen 3D vector describing the measurement: x and y GPS positions and IMU euler yaw orientation
-     * @return Eigen 3D vector describing the x, y and yaw pose values of the robot after EKF sensor fusion 
+     * @return Eigen 3D vectors describing the x, y and yaw pose values of the robot after the motion model and after EKF sensor fusion 
      */
-    Eigen::Vector3f ekf_estimation_step(const Eigen::Vector2f& u, float dt, float wb, const  Eigen::Vector3f& z);
+    Estimates ekf_estimation_step(const Eigen::Vector2f& u, float dt, float wb, const  Eigen::Vector3f& z);
 
 private:
     /**
@@ -34,7 +47,7 @@ private:
      * @param wb Wheel base of the car-like robot (difference between centres of front and rear wheels)
      * @return Eigen 5D vector describing the new predicted state of the robot [x y yaw linear_vel steering_angle]'
      */
-     Eigen::Matrix<float, 5, 1> motion_model(const  Eigen::Matrix<float, 5, 1>& xEst, const Eigen::Vector2f& u, float dt, float wb);
+    Eigen::Matrix<float, 5, 1> motion_model(const  Eigen::Matrix<float, 5, 1>& xEst, const Eigen::Vector2f& u, float dt, float wb);
 
     /**
      * @brief Maps the state vector from the prediction step to an observation
@@ -42,7 +55,7 @@ private:
      * @param jZ Eigen 3x5 matrix describing Jacobian measurement matrix 
      * @return Eigen 3D vector representing the predicted state mapped as an observation 
      */
-     Eigen::Vector3f measurement_model(const  Eigen::Matrix<float, 5, 1>& xPred, const  Eigen::Matrix<float, 3, 5>& jZ);
+    Eigen::Vector3f measurement_model(const  Eigen::Matrix<float, 5, 1>& xPred, const  Eigen::Matrix<float, 3, 5>& jZ);
 
     /**
      * @brief Returns the Jacobian matrix of the motion model derived from the differential drive equations for a car

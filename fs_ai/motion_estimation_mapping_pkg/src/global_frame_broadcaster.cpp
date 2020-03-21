@@ -14,13 +14,23 @@ z up
 class WorldFrameBroadcaster
 {
 public:
+    /**
+     * @brief Constructor for the global frame broadcaster class
+     */
     WorldFrameBroadcaster(ros::NodeHandle* nh): nh_(*nh) { initialise(); }
 
+    /**
+     * @brief Initialises the subscriber to the topic that publishes the current SLAM estimate of the robot inside the map  
+     */
     void initialise()
     {
         slam_sub_ = nh_.subscribe<nav_msgs::Odometry>("/slam_estimate", 1, boost::bind(&WorldFrameBroadcaster::slam_callback, this, _1));
     }
 
+    /**
+     * @brief Callback for Odometry messages
+     * @param An Odometry message 
+     */
     void slam_callback(const nav_msgs::Odometry::ConstPtr& msg)
     {
         transformStamped_.header.frame_id = "track";
@@ -39,6 +49,7 @@ public:
     }
 
 private:
+    //ROS helper variables 
     ros::NodeHandle nh_;
     ros::Subscriber slam_sub_;
     tf2_ros::TransformBroadcaster tfb_;
@@ -49,6 +60,8 @@ int main(int argc, char** argv)
 {
     ros::init(argc, argv, "track_frame_broadcaster_node");
     ros::NodeHandle nh;
+
+    //create frame broadcaster class and keep it open until the node gets killed
     WorldFrameBroadcaster tbc(&nh);
     ros::spin();
     return 0;

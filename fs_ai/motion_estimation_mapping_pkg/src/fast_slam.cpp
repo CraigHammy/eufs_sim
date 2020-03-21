@@ -29,6 +29,8 @@
 #include <sensor_msgs/ChannelFloat32.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <tf/transform_datatypes.h>
+#include <tf/transform_listener.h>
 #include "ekf_localisation.hpp"
 
 std::time_t now = std::time(0);
@@ -82,7 +84,7 @@ void StateEstimation::initialisePublishers()
     slam_path_pub_ = nh_.advertise<nav_msgs::Path>("slam_path", 1);
     landmark_cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/landmark_cloud", 1);
     slam_estimate_pub_ = nh_.advertise<nav_msgs::Odometry>("/slam_estimate", 1);
-    //cone_array_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("/cone_markers", 1);
+    cone_array_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("/cone_markers", 1);
     //odom_pub_ = nh_.advertise<visualization_msgs::Marker>("/odom_marker", 1);
 }
 
@@ -94,7 +96,7 @@ void StateEstimation::initialiseSubscribers()
     odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/ground_truth/odom", 1, boost::bind(&StateEstimation::odomCallback, this, _1));
     wheel_speeds_sub_ = nh_.subscribe<eufs_msgs::WheelSpeedsStamped>("/ros_can/wheel_speeds", 1, boost::bind(&StateEstimation::wheelSpeedCallback, this, _1));
     cone_sub_ = nh_.subscribe<perception_pkg::Cone>("/cones", 1, boost::bind(&StateEstimation::coneCallback, this, _1));
-    //ground_truth_cone_sub_ = nh_.subscribe<visualization_msgs::MarkerArray>("/ground_truth/cones/viz", 1, boost::bind(&StateEstimation::groundTruthConeCallback, this, _1));
+    ground_truth_cone_sub_ = nh_.subscribe<visualization_msgs::MarkerArray>("/ground_truth/cones/viz", 1, boost::bind(&StateEstimation::groundTruthConeCallback, this, _1));
     gps_sub_ = nh_.subscribe<geodetic_to_enu_conversion_pkg::Gps>("/odometry/gps", 1, boost::bind(&StateEstimation::gpsCallback, this, _1));
     imu_sub_ = nh_.subscribe<sensor_msgs::Imu>("/imu", 1, boost::bind(&StateEstimation::imuCallback, this, _1));
 }
@@ -107,7 +109,7 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
 {
     EKF ekf(&private_nh_);
 
-    while(!lap_closure_detected_)
+    while(ros::ok())
     {
         if (start_)
         {
@@ -117,6 +119,7 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
             //resampling();
         }
     }
+    as_.setSucceeded();
 }
 
 /**
@@ -189,7 +192,7 @@ void StateEstimation::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
     current_pose.pose.position.x = ground_truth_(0);
     current_pose.pose.position.y = ground_truth_(1);
     current_pose.pose.position.z = 0;
-    tf2::Quaternion orientation;
+    tf::Quaternion orientation;
     orientation.setRPY(0, 0, ground_truth_(2));
 
     current_pose.header.frame_id = "track";
@@ -330,17 +333,22 @@ void StateEstimation::prediction(EKF& ekf)
             dt * tanf(steering_angle) / wheel_base_, speed * dt / (pow(cosf(steering_angle), 2) * wheel_base_);
 
         //motion update using the Extended Kalman Filter step (prediction and update/correction)
-        p->mu_ = ekf.ekf_estimation_step(u, dt, wheel_base_, z);
+        Estimates e = ekf.ekf_estimation_step(u, dt, wheel_base_, z);
+
+        //covariance update
         p->sigma_ = Gx * p->sigma_ * Gx.transpose() + Gu * Q_ * Gu.transpose();
 
-        //p->motionUpdate(ekf, ground_truth_, speed, steering_angle, wheel_base_, dt, z, Gx, Gu, Q_);
+        //mean update and EKF motion model state vector (before GPS/IMU measurement update)
+        Eigen::Vector3f xPred;
+        xPred = e.xPred;
+        p->mu_ = e.xEst;
 
-        //add the motion model pose to a Path message and publish it 
+        //add the EKF motion model prediction pose to a Path message and publish it 
         geometry_msgs::PoseStamped current_pose;
-        current_pose.pose.position.x = p->mu_(0);
-        current_pose.pose.position.y = p->mu_(1);
+        current_pose.pose.position.x = xPred(0);
+        current_pose.pose.position.y = xPred(1);
         current_pose.pose.position.z = 0.0;
-        geometry_msgs::Quaternion orientation = tf::createQuaternionMsgFromYaw(p->mu_(2));
+        geometry_msgs::Quaternion orientation = tf::createQuaternionMsgFromYaw(xPred(2));
         current_pose.pose.orientation = orientation;
 
         current_pose.header.frame_id = "track";

@@ -135,9 +135,11 @@ include_directories(
 add_library(ekf_localisation
   src/ekf_localisation.cpp
 )
-
 add_library(particle
   src/particle.cpp
+)
+add_library(slam_utils
+  src/slam_utils.cpp
 )
 
 ## Add cmake target dependencies of the library
@@ -148,7 +150,6 @@ add_library(particle
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-#add_executable(findWayPoints src/findWayPoints.cpp)
 add_executable(global_frame_broadcaster src/global_frame_broadcaster.cpp)
 add_executable(fast_slam src/fast_slam.cpp)
 add_executable(action_client src/action_client.cpp)
@@ -162,21 +163,20 @@ add_executable(gps_imu_tests src/gps_imu_tests.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-#add_dependencies(findWayPoints ${findWayPoints_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(global_frame_broadcaster ${global_frame_broadcaster_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(fast_slam ${fast_slam_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(action_client ${action_client_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(gps_imu_tests ${gps_imu_tests_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-#target_link_libraries(findWayPoints
-#  ${catkin_LIBRARIES}
-#)
 target_link_libraries(global_frame_broadcaster
   ${catkin_LIBRARIES}
 )
+target_link_libraries(particle
+  ${catkin_LIBRARIES} slam_utils
+)
 target_link_libraries(fast_slam
-  ${catkin_LIBRARIES} ekf_localisation particle
+  ${catkin_LIBRARIES} ekf_localisation particle slam_utils
 )
 target_link_libraries(action_client
   ${catkin_LIBRARIES}
