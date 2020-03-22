@@ -21,7 +21,7 @@ public:
     /**
      * @brief Constructor for the Extende Kalman Filter class
      */
-    EKF(ros::NodeHandle* private_nh): private_nh_(*private_nh) {initialise();};
+    EKF(ros::NodeHandle* private_nh): private_nh_(private_nh) {initialise();};
 
     /**
      * @brief Extended Kalman Filter step: prediction and measurement update (correction)
@@ -74,7 +74,7 @@ private:
      Eigen::Matrix<float, 3, 5> jacobian_measurement();
 
     //private NodeHandle
-    ros::NodeHandle private_nh_;
+    ros::NodeHandle* private_nh_;
 
     //parameters to generate the control and measurement noise matrices 
     float sigmaUx, sigmaUy, sigmaUth;
@@ -84,6 +84,9 @@ private:
     //mean and covariance of the Extended Kalman Filter
      Eigen::Matrix<float, 5, 1> mu_;
      Eigen::Matrix<float, 5, 5> sigma_;
+
+    //motion model only estimate
+    Eigen::Matrix<float, 5, 1> predEst_;
 
     //process and measurement noise matrices
      Eigen::Matrix<float, 5, 5> Q_;

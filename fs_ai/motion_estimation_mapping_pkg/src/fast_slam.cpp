@@ -42,7 +42,9 @@ boost::random::mt19937 rng(static_cast<uint32_t>(now));
 void StateEstimation::initialise()
 {
     //initialise helper variables 
-    start_ = false;
+    control_start_ = false;
+    gps_start_ = false;
+    imu_start_ = false;
     cone_counter_ = 0;
     lap_closure_detected_ = false;
 
@@ -59,11 +61,11 @@ void StateEstimation::initialise()
     private_nh_.getParam("max_steering", max_steering_);
     private_nh_.getParam("wheel_base", wheel_base_);
     private_nh_.getParam("wheel_diameter", wheel_diameter_);
-    private_nh_.param("slam_control_noise_velocity", sigmaV);
-    private_nh_.param("slam_control_noise_steering_angle", sigmaG);
-    private_nh_.param("slam_measurement_noise_euclidean_distance", sigmaR);
-    private_nh_.param("slam_measurement_noise_angle_difference", sigmaB);
-    private_nh_.param("resampling_ratio_particles", resampling_ratio_);
+    private_nh_.getParam("slam_control_noise_velocity", sigmaV);
+    private_nh_.getParam("slam_control_noise_steering_angle", sigmaG);
+    private_nh_.getParam("slam_measurement_noise_euclidean_distance", sigmaR);
+    private_nh_.getParam("slam_measurement_noise_angle_difference", sigmaB);
+    private_nh_.getParam("resampling_ratio_particles", resampling_ratio_);
 
     //initialise control noise covariance matrix
     Q_ << powf(sigmaV, 2), 0, 0, powf(sigmaG * M_PI / 180, 2);
@@ -107,13 +109,11 @@ void StateEstimation::initialiseSubscribers()
  */
 void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoal::ConstPtr& goal)
 {
-    EKF ekf(&private_nh_);
-
     while(ros::ok())
     {
-        if (start_)
+        if (control_start_ && gps_start_ && imu_start_)
         {
-            prediction(ekf);
+            prediction();
             //correction(MAP_BUILDING);
             calculateFinalEstimate();
             //resampling();
@@ -154,7 +154,7 @@ void StateEstimation::normaliseWeights()
  */
 void StateEstimation::wheelSpeedCallback(const eufs_msgs::WheelSpeedsStamped::ConstPtr& msg)
 {
-    start_ = true;
+    control_start_ = true;
     float rpm_rb = msg->rb_speed; 
     float rpm_lb = msg->lb_speed;
     float rpm_rf = msg->rf_speed;
@@ -265,6 +265,7 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
 void StateEstimation::gpsCallback(const geodetic_to_enu_conversion_pkg::Gps::ConstPtr& msg)
 {
     //GPS x and y positions in ENU (East-North-Up) format
+    gps_start_ = true;
     gps_x_ = float(msg->x);
     gps_y_ = float(msg->y);
 }
@@ -276,6 +277,7 @@ void StateEstimation::gpsCallback(const geodetic_to_enu_conversion_pkg::Gps::Con
 void StateEstimation::imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
 {
     //convert yaw angle from quaternion to euler 
+    imu_start_ = true;
     tf::Quaternion q(msg->orientation.x, msg->orientation.y,
                     msg->orientation.z, msg->orientation.w);
     tf::Matrix3x3 m(q);
@@ -289,7 +291,7 @@ void StateEstimation::imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
  * @brief Sampling step: applying the motion model to every particle
  * @param ekf EKF class object reference used to apply the Extended Kalman Filter step for the motion model
  */
-void StateEstimation::prediction(EKF& ekf)
+void StateEstimation::prediction()
 {
     ROS_WARN("FastSLAM2.0 PREDICTION step underway...");
 
@@ -333,31 +335,40 @@ void StateEstimation::prediction(EKF& ekf)
             dt * tanf(steering_angle) / wheel_base_, speed * dt / (pow(cosf(steering_angle), 2) * wheel_base_);
 
         //motion update using the Extended Kalman Filter step (prediction and update/correction)
-        Estimates e = ekf.ekf_estimation_step(u, dt, wheel_base_, z);
+        Estimates e = p->ekf_.ekf_estimation_step(u, dt, wheel_base_, z);
+        p->mu_ = e.xEst;
 
         //covariance update
         p->sigma_ = Gx * p->sigma_ * Gx.transpose() + Gu * Q_ * Gu.transpose();
 
-        //mean update and EKF motion model state vector (before GPS/IMU measurement update)
-        Eigen::Vector3f xPred;
-        xPred = e.xPred;
-        p->mu_ = e.xEst;
-
-        //add the EKF motion model prediction pose to a Path message and publish it 
-        geometry_msgs::PoseStamped current_pose;
-        current_pose.pose.position.x = xPred(0);
-        current_pose.pose.position.y = xPred(1);
-        current_pose.pose.position.z = 0.0;
-        geometry_msgs::Quaternion orientation = tf::createQuaternionMsgFromYaw(xPred(2));
-        current_pose.pose.orientation = orientation;
-
-        current_pose.header.frame_id = "track";
-        current_pose.header.stamp = ros::Time::now();
-        
-        pred_path_.header = current_pose.header;
-        pred_path_.poses.push_back(current_pose);
-        pred_path_pub_.publish(pred_path_);
+        //EKF motion model state vector (before GPS/IMU measurement update)
+        p->mu_pred_ = e.xPred;
     }
+
+    //add the EKF motion model prediction pose to a Path message and publish it 
+    float x = 0.0;
+    float y = 0.0;
+    float yaw = 0.0;
+    for (p = particles_.begin(); p != particles_.end(); ++p)
+    {
+        x += p->mu_pred_(0);
+        y += p->mu_pred_(1);
+        yaw += p->mu_pred_(2);
+    }
+
+    geometry_msgs::PoseStamped current_pose;
+    current_pose.pose.position.x = x / num_particles_;
+    current_pose.pose.position.y = y / num_particles_;
+    current_pose.pose.position.z = 0.0;
+    geometry_msgs::Quaternion orientation = tf::createQuaternionMsgFromYaw(yaw / num_particles_);
+    current_pose.pose.orientation = orientation;
+
+    current_pose.header.frame_id = "track";
+    current_pose.header.stamp = ros::Time::now();
+    
+    pred_path_.header = current_pose.header;
+    pred_path_.poses.push_back(current_pose);
+    pred_path_pub_.publish(pred_path_);
 }
 
 /**
@@ -471,7 +482,14 @@ void StateEstimation::resampling()
     float Nmin = num_particles_ * resampling_ratio_;
 
     //vector for new set of particles
-    std::vector<Particle> new_particles(num_particles_);
+    std::vector<Particle> new_particles;
+    for (int i = 0; i != num_particles_; ++i)
+    {
+        EKF ekf(&private_nh_);
+        Particle p(&ekf);
+        new_particles.push_back(p);
+
+    }
 
     //vector of cumulative weights
     Eigen::ArrayXf weights_cumulative(num_particles_);

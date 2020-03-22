@@ -172,11 +172,17 @@ add_dependencies(gps_imu_tests ${gps_imu_tests_EXPORTED_TARGETS} ${catkin_EXPORT
 target_link_libraries(global_frame_broadcaster
   ${catkin_LIBRARIES}
 )
+target_link_libraries(slam_utils
+  ${catkin_LIBRARIES} 
+)
 target_link_libraries(particle
+  ${catkin_LIBRARIES} slam_utils ekf_localisation
+)
+target_link_libraries(ekf_localisation
   ${catkin_LIBRARIES} slam_utils
 )
 target_link_libraries(fast_slam
-  ${catkin_LIBRARIES} ekf_localisation particle slam_utils
+  ${catkin_LIBRARIES} particle slam_utils ekf_localisation
 )
 target_link_libraries(action_client
   ${catkin_LIBRARIES}

@@ -2,6 +2,7 @@
 #include "ekf_localisation.hpp"
 #include <Eigen/Core>
 #include <Eigen/Dense>
+#include "slam_utils.hpp"
 
 /**
  * @brief Initialises parameters and variables needed for the Extended Kalman Filter
@@ -9,14 +10,14 @@
 void EKF::initialise()
 {
     //initialise parameters from server 
-    private_nh_.param("ekf_control_noise_x", sigmaUx);
-    private_nh_.param("ekf_control_noise_y", sigmaUy);
-    private_nh_.param("ekf_control_noise_yaw", sigmaUth);
-    private_nh_.param("ekf_control_noise_vel", sigmaUv);
-    private_nh_.param("ekf_control_noise_steer", sigmaUst);
-    private_nh_.param("ekf_gps_noise_x", sigmaZx);
-    private_nh_.param("ekf_gps_noise_y", sigmaZy);
-    private_nh_.param("ekf_imu_noise_yaw", sigmaZth);
+    private_nh_->getParam("ekf_control_noise_x", sigmaUx);
+    private_nh_->getParam("ekf_control_noise_y", sigmaUy);
+    private_nh_->getParam("ekf_control_noise_yaw", sigmaUth);
+    private_nh_->getParam("ekf_control_noise_vel", sigmaUv);
+    private_nh_->getParam("ekf_control_noise_steer", sigmaUst);
+    private_nh_->getParam("ekf_gps_noise_x", sigmaZx);
+    private_nh_->getParam("ekf_gps_noise_y", sigmaZy);
+    private_nh_->getParam("ekf_imu_noise_yaw", sigmaZth);
 
     //initialise control noise covariance matrix
     Q_ << powf(sigmaUx, 2), 0, 0, 0, 0, 
@@ -31,6 +32,9 @@ void EKF::initialise()
     //initialise mean and covariance of the Extended Kalman Filter 
     mu_ << Eigen::Matrix<float, 5, 1>::Zero();
     sigma_ << Eigen::Matrix<float, 5, 5>::Identity();
+
+    //initialise motion model estimate of the Extended Kalman Filter
+    predEst_ << Eigen::Matrix<float, 5, 1>::Zero();
 }
 
 /**
@@ -48,6 +52,10 @@ Estimates EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, float wb,
     Eigen::Matrix<float, 5, 5> pPred;
     Eigen::Matrix<float, 5, 5> jX;
 
+    //only motion model (for visualization purposes)
+    predEst_ = motion_model(predEst_, u, dt, wb);
+
+    //from last correction estimate
     xPred << motion_model(mu_, u, dt, wb);
     jX << jacobian_position(mu_, u, dt, wb);
     pPred << jX * sigma_ * jX.transpose() + Q_;
@@ -65,14 +73,13 @@ Estimates EKF::ekf_estimation_step(const Eigen::Vector2f& u, float dt, float wb,
     zPred << measurement_model(xPred, jZ);
     innov_seq << z - zPred;
     mu_ = xPred + K * innov_seq;
-    std::cout << "updated mean\n" << xPred << std::endl;
     sigma_ = (Eigen::Matrix<float, 5, 5>::Identity() - K * jZ) * pPred;
 
     //create 3D vectors to pass prediction and correction state vectors to the FastSLAM2.0 algorithm 
     Estimates e;
     Eigen::Vector3f xEst, xPred3D;
     xEst << mu_(0), mu_(1), mu_(2);
-    xPred3D << xPred(0), xPred(1), xPred(2);
+    xPred3D << predEst_(0), predEst_(1), predEst_(2);
     e.xPred = xPred3D;
     e.xEst = xEst;
     return e;
@@ -99,7 +106,7 @@ Eigen::Matrix<float, 5, 1> EKF::motion_model(const Eigen::Matrix<float, 5, 1>& x
 
     //calculate new estimates from motion model
     Eigen::Matrix<float, 5, 1> xPred;
-    xPred << xEst(0) + delta_x, xEst(1) + delta_y, xEst(2) + delta_th, speed, steering_angle;
+    xPred << xEst(0) + delta_x, xEst(1) + delta_y, angleWrap(xEst(2) + delta_th), speed, steering_angle;
     return xPred;
 }
 

@@ -5,6 +5,8 @@
 #include <ros/ros.h>
 #include <geometry_msgs/Point.h>
 #include <Eigen/Core>
+#include <tf/transform_listener.h>
+#include <tf/transform_datatypes.h>
 
 enum SLAM_PHASE {
     MAP_BUILDING,

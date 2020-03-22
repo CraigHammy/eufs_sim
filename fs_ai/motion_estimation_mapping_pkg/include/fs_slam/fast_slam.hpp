@@ -21,6 +21,8 @@
 #include <geodetic_to_enu_conversion_pkg/Gps.h>
 #include <nav_msgs/Path.h>
 #include <sensor_msgs/PointCloud.h>
+#include <tf/transform_datatypes.h>
+#include <tf/transform_listener.h>
 
 class StateEstimation
 {
@@ -43,10 +45,11 @@ public:
         {
             initialise();
             as_.start();
+            EKF ekf(&private_nh_);
 
             for (int i = 0; i != num_particles; ++i)
             {
-                Particle particle;
+                Particle particle(&ekf);
                 particles_.push_back(particle);
             }
         };
@@ -64,9 +67,8 @@ public:
     
     /**
      * @brief Sampling step: applying the motion model to every particle
-     * @param ekf EKF class object reference used to apply the Extended Kalman Filter step for the motion model
      */
-    void prediction(EKF& ekf);
+    void prediction();
 
     /**
      * @brief Correction step: applying the measurement model to every particle
@@ -200,9 +202,11 @@ private:
     //observations
     std::deque<perception_pkg::Cone> input_data_;
 
-    //helper booleans 
+    //helper variables 
     bool lap_closure_detected_;
-    bool start_;
+    bool control_start_;
+    bool gps_start_;
+    bool imu_start_;
 
     //ground truth odometry estimate
     Eigen::Vector3f ground_truth_;
