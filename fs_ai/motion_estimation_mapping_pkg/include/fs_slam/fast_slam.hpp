@@ -39,8 +39,8 @@ public:
      * @param name  Name of the action server 
      * @return StateEstimation class object with initialised parameters and initialised action server
      */
-    StateEstimation(ros::NodeHandle* nh, int num_particles, const std::string& name): num_particles_(num_particles),
-        ground_truth_(Eigen::Vector3f::Zero()), private_nh_("~"), nh_(*nh), action_name_(name),
+    StateEstimation(ros::NodeHandle* nh, int num_particles, const std::string& name, bool visualize=true): vis_(visualize),
+        num_particles_(num_particles),ground_truth_(Eigen::Vector3f::Zero()), private_nh_("~"), nh_(*nh), action_name_(name),
         as_(*nh, name, boost::bind(&StateEstimation::executeCB, this, _1), false)
         {
             initialise();
@@ -207,6 +207,7 @@ private:
     bool control_start_;
     bool gps_start_;
     bool imu_start_;
+    bool vis_;
 
     //ground truth odometry estimate
     Eigen::Vector3f ground_truth_;

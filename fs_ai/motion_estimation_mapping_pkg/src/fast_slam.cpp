@@ -187,20 +187,24 @@ void StateEstimation::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
     m.getRPY(roll, pitch, yaw);
     ground_truth_(2) = yaw;
 
-    //store retrieved pose into Path message and publish it 
-    geometry_msgs::PoseStamped current_pose;
-    current_pose.pose.position.x = ground_truth_(0);
-    current_pose.pose.position.y = ground_truth_(1);
-    current_pose.pose.position.z = 0;
-    tf::Quaternion orientation;
-    orientation.setRPY(0, 0, ground_truth_(2));
+    //check if visualization is requested by user
+    if (vis_)
+    {
+        //store retrieved pose into Path message and publish it 
+        geometry_msgs::PoseStamped current_pose;
+        current_pose.pose.position.x = ground_truth_(0);
+        current_pose.pose.position.y = ground_truth_(1);
+        current_pose.pose.position.z = 0;
+        tf::Quaternion orientation;
+        orientation.setRPY(0, 0, ground_truth_(2));
 
-    current_pose.header.frame_id = "track";
-    current_pose.header.stamp = ros::Time::now();
-    
-    odom_path_.header = current_pose.header;
-    odom_path_.poses.push_back(current_pose);
-    odom_path_pub_.publish(odom_path_);
+        current_pose.header.frame_id = "track";
+        current_pose.header.stamp = ros::Time::now();
+        
+        odom_path_.header = current_pose.header;
+        odom_path_.poses.push_back(current_pose);
+        odom_path_pub_.publish(odom_path_);
+    }
 }
 
 /**
@@ -345,30 +349,33 @@ void StateEstimation::prediction()
         p->mu_pred_ = e.xPred;
     }
 
-    //add the EKF motion model prediction pose to a Path message and publish it 
-    float x = 0.0;
-    float y = 0.0;
-    float yaw = 0.0;
-    for (p = particles_.begin(); p != particles_.end(); ++p)
+    //check if visualization is requested by user
+    if (vis_)
     {
-        x += p->mu_pred_(0);
-        y += p->mu_pred_(1);
-        yaw += p->mu_pred_(2);
+        //add the EKF motion model prediction pose to a Path message and publish it (to see difference with ground truth and SLAM estimate)
+        float x = 0.0;
+        float y = 0.0;
+        float yaw = 0.0;
+        for (p = particles_.begin(); p != particles_.end(); ++p)
+        {
+            x += p->mu_pred_(0);
+            y += p->mu_pred_(1);
+            yaw += p->mu_pred_(2);
+        }
+        geometry_msgs::PoseStamped current_pose;
+        current_pose.pose.position.x = x / num_particles_;
+        current_pose.pose.position.y = y / num_particles_;
+        current_pose.pose.position.z = 0.0;
+        geometry_msgs::Quaternion orientation = tf::createQuaternionMsgFromYaw(yaw / num_particles_);
+        current_pose.pose.orientation = orientation;
+
+        current_pose.header.frame_id = "track";
+        current_pose.header.stamp = ros::Time::now();
+        
+        pred_path_.header = current_pose.header;
+        pred_path_.poses.push_back(current_pose);
+        pred_path_pub_.publish(pred_path_);
     }
-
-    geometry_msgs::PoseStamped current_pose;
-    current_pose.pose.position.x = x / num_particles_;
-    current_pose.pose.position.y = y / num_particles_;
-    current_pose.pose.position.z = 0.0;
-    geometry_msgs::Quaternion orientation = tf::createQuaternionMsgFromYaw(yaw / num_particles_);
-    current_pose.pose.orientation = orientation;
-
-    current_pose.header.frame_id = "track";
-    current_pose.header.stamp = ros::Time::now();
-    
-    pred_path_.header = current_pose.header;
-    pred_path_.poses.push_back(current_pose);
-    pred_path_pub_.publish(pred_path_);
 }
 
 /**
@@ -591,30 +598,34 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
         xEst_(2) = angleWrap(xEst_(2) + p->weight_ * p->mu_(2));
     }
 
-    //publish pose for slam path visualization
-    geometry_msgs::PoseStamped current_pose;
-    current_pose.pose.position.x = xEst_(0);
-    current_pose.pose.position.y = xEst_(1);
-    current_pose.pose.position.z = 0.0;
-    geometry_msgs::Quaternion orientation = tf::createQuaternionMsgFromYaw(xEst_(2));
-    current_pose.pose.orientation = orientation;
-    current_pose.header.frame_id = "track";
-    current_pose.header.stamp = ros::Time::now();
-    slam_path_.header = current_pose.header;
-    slam_path_.poses.push_back(current_pose);
-    slam_path_pub_.publish(slam_path_);
+    //check if visualization is requested by user
+    if (vis_)
+    {
+        //publish pose for slam path visualization
+        geometry_msgs::PoseStamped current_pose;
+        current_pose.pose.position.x = xEst_(0);
+        current_pose.pose.position.y = xEst_(1);
+        current_pose.pose.position.z = 0.0;
+        geometry_msgs::Quaternion orientation = tf::createQuaternionMsgFromYaw(xEst_(2));
+        current_pose.pose.orientation = orientation;
+        current_pose.header.frame_id = "track";
+        current_pose.header.stamp = ros::Time::now();
+        slam_path_.header = current_pose.header;
+        slam_path_.poses.push_back(current_pose);
+        slam_path_pub_.publish(slam_path_);
 
-    //publish odometry message for slam estimate
-    nav_msgs::Odometry est;
-    est.header.stamp = ros::Time::now();
-    est.header.frame_id = "track";
-    est.child_frame_id = "base_footprint";
+        //publish odometry message for slam estimate
+        nav_msgs::Odometry est;
+        est.header.stamp = ros::Time::now();
+        est.header.frame_id = "track";
+        est.child_frame_id = "base_footprint";
 
-    est.pose.pose.position.x = xEst_(0);
-    est.pose.pose.position.y = xEst_(1);
-    est.pose.pose.position.z = 0.0;
-    est.pose.pose.orientation = orientation;
-    slam_estimate_pub_.publish(est);
+        est.pose.pose.position.x = xEst_(0);
+        est.pose.pose.position.y = xEst_(1);
+        est.pose.pose.position.z = 0.0;
+        est.pose.pose.orientation = orientation;
+        slam_estimate_pub_.publish(est);
+    }
 
     return xEst_;
 }
