@@ -2,6 +2,7 @@
 #define FAST_SLAM2_ROS_HEADER
 
 #include <Eigen/Dense>
+#include <utility>
 #include <nav_msgs/Odometry.h>
 #include "particle.hpp"
 #include "slam_utils.hpp"
@@ -224,8 +225,9 @@ private:
     int cone_counter_;
     visualization_msgs::MarkerArray cone_array_;
 
-    //landmark visualization variable
+    //landmark visualization variables
     sensor_msgs::PointCloud landmark_cloud_;
+    std::map<std::string, int> landmark_vis_mappings_;
 };
 
 #endif

@@ -109,14 +109,49 @@ void StateEstimation::initialiseSubscribers()
  */
 void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoal::ConstPtr& goal)
 {
-    while(ros::ok())
+    while(!lap_closure_detected_)
     {
+        //ros::Time start = ros::Time::now();
         if (control_start_ && gps_start_ && imu_start_)
         {
             prediction();
-            //correction(MAP_BUILDING);
+            correction(MAP_BUILDING);
             calculateFinalEstimate();
-            //resampling();
+            resampling();
+        }
+        //ros::Time finish = ros::Time::now();
+        //std::cout << "frequency: " << 1/((finish - start).toSec()) << std::endl;
+    }
+
+    while (ros::ok)
+    {
+        std::vector<Particle>::iterator p;
+        for (p = particles_.begin(); p != particles_.end(); ++p)
+        {
+            std::vector<Landmark>::const_iterator lm;
+            for(lm = p->landmarks_.begin(); lm != p->landmarks_.end(); ++lm)
+            {
+                //add new landmark to landmark vector and to landmark cloud for visualization
+                geometry_msgs::Point32 point;
+                point.x = lm->mu_(0);
+                point.y = lm->mu_(1);
+                point.z = 0.0;
+                landmark_cloud_.points.push_back(point);
+                landmark_cloud_.header.stamp = ros::Time::now();
+                landmark_cloud_.header.frame_id = "track";
+                
+                sensor_msgs::ChannelFloat32 channel;
+                channel.name = "rgb";
+                std::vector<float> colour(landmark_cloud_.points.size(), 255255255);
+                channel.values = colour;
+                std::vector<sensor_msgs::ChannelFloat32> channels(landmark_cloud_.points.size(), channel);
+                landmark_cloud_.channels = channels;
+
+                //publish landmark PointCloud2 message 
+                sensor_msgs::PointCloud2 cloud;
+                sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
+                landmark_cloud_pub_.publish(cloud);
+            }
         }
     }
     as_.setSucceeded();
@@ -167,6 +202,11 @@ void StateEstimation::wheelSpeedCallback(const eufs_msgs::WheelSpeedsStamped::Co
     //update RobotCommand variable 
     u_.speed = (right_back + left_back) / 2.0;
     u_.steering_angle = msg->steering;
+
+    if ((u_.speed < 0.01) && (particles_.at(0).landmarks_.size() > 30)) {
+        ROS_WARN("lap closure detected");
+        lap_closure_detected_ = true;
+    }
 }
 
 /**
@@ -236,12 +276,17 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
     input_data_.push_back(*msg);
 
     //if detected cone is orange, lap closure detected
-    if (msg->colour.compare("orange"))
+    std::string colour = msg->colour;
+    std::cout << colour << std::endl;
+    if ((colour == "orange") && (particles_.at(0).landmarks_.size() > 20)) {
+        ROS_WARN("lap closure detected");
+        std::cout << msg->colour << std::endl;
         lap_closure_detected_ = true;
+    }
     
    
     //publish the cone detections as markers
-    visualization_msgs::Marker marker;
+    /*visualization_msgs::Marker marker;
     marker.header.frame_id = "/velodyne";
     marker.header.stamp = ros::Time::now();
     marker.id = cone_counter_;
@@ -259,7 +304,7 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
     marker.color.a = 1.0;
     cone_array_.markers.push_back(marker);
     cone_array_pub_.publish(cone_array_);
-    ++cone_counter_;
+    ++cone_counter_;*/
 }
 
 /**
@@ -297,7 +342,7 @@ void StateEstimation::imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
  */
 void StateEstimation::prediction()
 {
-    ROS_WARN("FastSLAM2.0 PREDICTION step underway...");
+    //ROS_WARN("FastSLAM2.0 PREDICTION step underway...");
 
     //store values from the WheelSpeeds callback  
    float steering_angle = u_.steering_angle;
@@ -384,7 +429,7 @@ void StateEstimation::prediction()
  */
 void StateEstimation::correction(SLAM_PHASE slam_phase)
 {
-    ROS_WARN("FastSLAM2.0 CORRECTION step underway...");
+    //ROS_WARN("FastSLAM2.0 CORRECTION step underway...");
 
     std::vector<Particle>::iterator p;
     std::deque<perception_pkg::Cone>::const_iterator z;
@@ -407,7 +452,8 @@ void StateEstimation::correction(SLAM_PHASE slam_phase)
     }
 
     //iterating through all particles
-    for (p = particles_.begin(); p != particles_.end(); ++p)
+    int particle_count = 1;
+    for (p = particles_.begin(); p != particles_.end(); ++p, ++particle_count)
     {
         if (p->known_features_.size() != 0)
         {
@@ -442,27 +488,39 @@ void StateEstimation::correction(SLAM_PHASE slam_phase)
         //iterating through unknown features
         std::vector<DataAssociation>::const_iterator u;
         for (u = p->unknown_features_.begin(); u != p->unknown_features_.end(); ++u)
-        {
-            //add new landmark to landmark vector and to landmark cloud for visualization
-            Eigen::Vector2f lm_xy;
-            lm_xy = p->addNewLandmark(u->measurement, u->colour, R_);
-            geometry_msgs::Point32 lm_point;
-            lm_point.x = lm_xy(0);
-            lm_point.y = lm_xy(1);
-            lm_point.z = 0.0;
-            landmark_cloud_.points.push_back(lm_point);
+        {   
+            //add a new landmark
+            Eigen::Vector2f landmark;
+            landmark = p->addNewLandmark(u->measurement, u->colour, R_);
+            /*
+            //add to mappings to keep track of the pointcloud population
+            int landmark_number = p->landmarks_.size() + 1;
+            std::stringstream result;
+            std::vector<int> encoding;
+            encoding.push_back(0);
+            encoding.push_back(particle_count);
+            encoding.push_back(0);
+            encoding.push_back(landmark_number);
+            std::copy(encoding.begin(), encoding.end(), std::ostream_iterator<int>(result, ""));
+            landmark_vis_mappings_.insert(std::pair<std::string, int>(result.str().c_str(), landmark_cloud_.points.size()));
+            //ROS_INFO("key: %s, value: %d", result.str().c_str(), int(landmark_cloud_.points.size()));
+
+            //add new landmark to landmark cloud for visualization
+            geometry_msgs::Point32 point;
+            point.x = landmark(0);
+            point.y = landmark(1);
+            point.z = 0.0;
+            landmark_cloud_.points.push_back(point);
             landmark_cloud_.header.stamp = ros::Time::now();
-            landmark_cloud_.header.frame_id = "track";
-            
-            //publish landmark PointCloud2 message
-            sensor_msgs::PointCloud2 cloud;
-            sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
-            ROS_INFO("hello");
-            landmark_cloud_pub_.publish(cloud);
+            landmark_cloud_.header.frame_id = "track";*/
         }
         //remove all data from unknown features vector 
         p->unknown_features_.clear();
     }
+    //publish landmark PointCloud2 message
+    //sensor_msgs::PointCloud2 cloud;
+    //sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
+    //landmark_cloud_pub_.publish(cloud);
 }
 
 
@@ -471,7 +529,7 @@ void StateEstimation::correction(SLAM_PHASE slam_phase)
  */
 void StateEstimation::resampling()
 {
-    ROS_WARN("FastSLAM2.0 RESAMPLING step underway...");
+    //ROS_WARN("FastSLAM2.0 RESAMPLING step underway...");
 
     //normalize weights
     normaliseWeights();
@@ -541,16 +599,17 @@ void StateEstimation::resampling()
 
             //reinitialise the weights so their sum adds up to 1
             particles_.at(i).weight_ = 1.0 / num_particles_;
-
+/*
             std::vector<Landmark>::const_iterator lm;
             for(lm = particles_.at(i).landmarks_.begin(); lm != particles_.at(i).landmarks_.end(); ++lm)
             {
+                
                 //add new landmark to landmark vector and to landmark cloud for visualization
-                geometry_msgs::Point32 lm_point;
-                lm_point.x = lm->mu_(0);
-                lm_point.y = lm->mu_(1);
-                lm_point.z = 0.0;
-                landmark_cloud_.points.push_back(lm_point);
+                geometry_msgs::Point32 point;
+                point.x = lm->mu_(0);
+                point.y = lm->mu_(1);
+                point.z = 0.0;
+                landmark_cloud_.points.push_back(point);
                 landmark_cloud_.header.stamp = ros::Time::now();
                 landmark_cloud_.header.frame_id = "track";
                 
@@ -566,7 +625,9 @@ void StateEstimation::resampling()
                 sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
                 ROS_INFO("hello");
                 landmark_cloud_pub_.publish(cloud);
+                
             }
+            */
         }
     }
 }
@@ -578,7 +639,7 @@ void StateEstimation::resampling()
 Eigen::Vector3f StateEstimation::calculateFinalEstimate()
 {
     //set SLAM estimate to zero and normalise all particle weights
-    ROS_INFO("FastSLAM2.0 Final Estimate");
+    //ROS_INFO("FastSLAM2.0 Final Estimate");
     xEst_ = Eigen::Vector3f::Zero();
     normaliseWeights();
 
@@ -615,7 +676,7 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
         slam_path_pub_.publish(slam_path_);
 
         //publish odometry message for slam estimate
-        nav_msgs::Odometry est;
+        /*nav_msgs::Odometry est;
         est.header.stamp = ros::Time::now();
         est.header.frame_id = "track";
         est.child_frame_id = "base_footprint";
@@ -624,7 +685,7 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
         est.pose.pose.position.y = xEst_(1);
         est.pose.pose.position.z = 0.0;
         est.pose.pose.orientation = orientation;
-        slam_estimate_pub_.publish(est);
+        slam_estimate_pub_.publish(est);*/
     }
 
     return xEst_;
@@ -636,7 +697,7 @@ int main(int argc, char** argv)
     ros::NodeHandle nh;
     
     //initialise FastSLAM2.0 action server and keep it open
-    StateEstimation action_server(&nh, 10, "fastslam");
+    StateEstimation action_server(&nh, 1, "fastslam");
     ros::spin();
 
     return 0;
