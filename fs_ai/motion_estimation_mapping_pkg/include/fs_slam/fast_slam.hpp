@@ -87,6 +87,12 @@ public:
      * @return A 3D Eigen Vector representing the final SLAM estimate for the current iteration
      */
     Eigen::Vector3f calculateFinalEstimate();
+
+    /**
+     * @brief Calculates the squared norm of the difference between the observations based on the map and on sensor data
+     * @return Squared norm of difference between observations based on map and on sensor data  
+     */
+    float squaredNormDifference();
     
 private:
     /**
@@ -159,6 +165,9 @@ private:
     ros::Subscriber gps_sub_;
     ros::Subscriber imu_sub_;
     ros::Subscriber ground_truth_cone_sub_;
+
+    //ROS Service Client
+    ros::ServiceClient client;
 
     //ROS publishers
     ros::Publisher odom_pub_;

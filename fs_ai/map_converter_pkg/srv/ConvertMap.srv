@@ -1,0 +1,5 @@
+#request
+geometry_msgs/Point[] landmarks #z coordinate is zero because they are all planar 
+---
+#response
+nav_msgs/OccupancyGrid map

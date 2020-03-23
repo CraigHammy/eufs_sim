@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(map_generator_pkg)
+project(map_converter_pkg)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -10,12 +10,13 @@ project(map_generator_pkg)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   nav_msgs
+  geometry_msgs
   std_msgs
   message_generation
 )
 
 ## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
+find_package(Eigen3)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -74,6 +75,7 @@ generate_messages(
   DEPENDENCIES
   std_msgs  # Or other packages containing msgs
   nav_msgs
+  geometry_msgs
 )
 
 ################################################
@@ -107,8 +109,8 @@ generate_messages(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES map_generator_pkg
- CATKIN_DEPENDS roscpp
+#  LIBRARIES map_converter_pkg
+  CATKIN_DEPENDS roscpp 
 #  DEPENDS system_lib
 )
 
@@ -119,14 +121,15 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
+  include/map_converter_pkg/
   ${catkin_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIR}
 )
 
 ## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/map_generator_pkg.cpp
-# )
+#add_library(map_converter_pkg
+#  src/map_converter.cpp
+#)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -175,11 +178,9 @@ target_link_libraries(map_converter
 # )
 
 ## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
-# )
+#install(DIRECTORY include/map_converter_pkg/
+#  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+#)
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES

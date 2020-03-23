@@ -9,95 +9,43 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/MapMetaData.h>
 #include <std_srvs/Empty.h>
-#include <map_generator_pkg/ConvertMap.h>
+#include <map_converter_pkg/ConvertMap.h>
 #include "tf2/LinearMath/Matrix3x3.h"
 #include "geometry_msgs/Quaternion.h"
+#include <geometry_msgs/Point.h>
+#include <Eigen/Core>
+#include <Eigen/Dense>
+#include "map_converter.hpp"
 
-//compute linear index for given map coords
-#define MAP_IDX(width, x, y) ((width) * (x) + (y))
 
-//compute pose from map parameters resolution and cell number
-#define POSE_VAL(res, cell) (res * cell)
-
-//compute cell number from map resolution and pose value
-#define CELL_NUM(res, pose) (pose / res)
-
-struct Cone
+void MapConverter::printData()
 {
-    float x;
-    float y;
-};
-
-class MapConverter
-{
-public:
-    MapConverter(ros::NodeHandle *nh, std::vector<Cone> data, std::string folder): folder_name_(folder),cones_(data), nh_(*nh)
-    { initialise(); generateMapBoundaries(); };
-
-    MapConverter(ros::NodeHandle *nh, std::string name, std::string folder, char delim = ','): folder_name_(folder), file_name_(name), delimiter_(delim), nh_(*nh)
-    { readCSV(); initialise(); generateMapBoundaries(); };
-
-    std::vector<Cone> readCSV();
-
-    void printData()
+    std::vector<geometry_msgs::Point>::const_iterator cone;
+    int cone_number = 1;
+    for(cone =cones_.begin(); cone !=cones_.end(); ++cone, ++cone_number)
     {
-        std::vector<Cone>::const_iterator cone;
-        int cone_number = 1;
-        for(cone =cones_.begin(); cone !=cones_.end(); ++cone, ++cone_number)
-        {
-            ROS_INFO("Cone no.%d location => x: %f, y: %f", cone_number, cone->x, cone->y);
-        }
+        ROS_INFO("Cone no.%d location => x: %f, y: %f", cone_number, cone->x, cone->y);
+    }
+}
+
+void MapConverter::generateMapBoundaries()
+{
+    float highest = -1000;
+
+    std::vector<geometry_msgs::Point>::const_iterator cone;
+    for(cone =cones_.begin(); cone !=cones_.end(); ++cone)
+    {
+        if (abs(cone->x) > highest)
+            highest = abs(cone->y);
+        else if (abs(cone->x) > highest)
+            highest = abs(cone->y); 
     }
 
-    void generateMapBoundaries()
-    {
-        float highest = -1000;
-
-        std::vector<Cone>::const_iterator cone;
-        for(cone =cones_.begin(); cone !=cones_.end(); ++cone)
-        {
-            if (abs(cone->x) > highest)
-                highest = abs(cone->x);
-            else if (cone->y > highest)
-                highest = abs(cone->y); 
-        }
-
-        int length = int(highest) + (10 -(int(highest) % 10));
-        int cell_length = CELL_NUM(resolution_, length) * 2;
-        width_ = cell_length;
-        height_ = cell_length;
-    }
-
-    void createMap();
-    void saveMap(const std::string& map_name);
-    bool mapCallback(map_generator_pkg::ConvertMap::Request& req, map_generator_pkg::ConvertMap::Response& res);    
-
-private:
-    void initialise();
-    float getCell(int x, int y);
-    float lagrangeInterpolation(float x_input, std::vector<float> xs, std::vector<float> ys);
-
-    std::string file_name_;
-    std::string folder_name_;
-    char delimiter_;
-    std::vector<Cone>cones_;
-    std::vector<Cone> blue_cones_, yellow_cones_; 
-    bool got_map_;
-
-    float resolution_;
-    int width_;
-    int height_;
-    float occ_thresh_;
-    float cone_radius_;
-    float interpolation_thresh_;
-
-    ros::NodeHandle nh_;
-    map_generator_pkg::ConvertMap::Response map_;
-    ros::Publisher occupancy_grid_pub_;
-    ros::Publisher map_metadata_pub_;
-    ros::ServiceServer convert_map_service_;
-
-};
+    int length = int(highest) + (10 -(int(highest) % 10));
+    int cell_length = CELL_NUM(resolution_, length) * 2;
+    width_ = cell_length;
+    height_ = cell_length;
+}
 
 void MapConverter::initialise()
 {
@@ -110,19 +58,15 @@ void MapConverter::initialise()
     resolution_ = 0.1;
     got_map_ = false;
     interpolation_thresh_ = 1.25;
-
-    std::vector<Cone>::iterator cone;
-    for(cone = yellow_cones_.begin(); cone != yellow_cones_.end(); ++cone)
-    {
-        
-    } 
-
-
 }
 
-bool MapConverter::mapCallback(map_generator_pkg::ConvertMap::Request& req, map_generator_pkg::ConvertMap::Response& res)
+bool MapConverter::mapCallback(map_converter_pkg::ConvertMap::Request& req, map_converter_pkg::ConvertMap::Response& res)
 {
     ROS_INFO("Converting map");
+    cones_ = req.landmarks;
+
+    initialise(); 
+    generateMapBoundaries();
     createMap();
     
     if(got_map_)
@@ -133,7 +77,7 @@ bool MapConverter::mapCallback(map_generator_pkg::ConvertMap::Request& req, map_
     }
 }
 
-std::vector<Cone> MapConverter::readCSV()
+std::vector<geometry_msgs::Point> MapConverter::readCSV()
 {
     //create input filestream
     std::ifstream file(file_name_.c_str());
@@ -142,7 +86,7 @@ std::vector<Cone> MapConverter::readCSV()
     if (!file.is_open()) throw std::runtime_error("Could not open file");
 
     //helpers
-    std::vector<Cone> locations;
+    std::vector<geometry_msgs::Point> locations;
     std::string line;
 
     //skip first line
@@ -164,7 +108,7 @@ std::vector<Cone> MapConverter::readCSV()
         //check that they are cones are not other objects from the csv file 
         if ( (row[0].compare("yellow"))==0)
         {
-            Cone cone;
+            geometry_msgs::Point cone;
             cone.x = std::atof(row[1].c_str());
             cone.y = std::atof(row[2].c_str());
            cones_.push_back(cone);
@@ -172,7 +116,7 @@ std::vector<Cone> MapConverter::readCSV()
         }
         else if ((row[0].compare("blue"))==0)
         {
-            Cone cone;
+            geometry_msgs::Point cone;
             cone.x = std::atof(row[1].c_str());
             cone.y = std::atof(row[2].c_str());
            cones_.push_back(cone);
@@ -180,7 +124,7 @@ std::vector<Cone> MapConverter::readCSV()
         } 
         else if ((row[0].compare("big_orange"))==0)
         {
-            Cone cone;
+            geometry_msgs::Point cone;
             cone.x = std::atof(row[1].c_str());
             cone.y = std::atof(row[2].c_str());
            cones_.push_back(cone);
@@ -226,7 +170,7 @@ void MapConverter::createMap()
     //set header information
     map_.map.header.stamp = ros::Time::now();
     map_.map.header.frame_id = "map";
-    ROS_INFO("Occupancy grid map created from list of x and y points");
+    ROS_INFO("Occupancy grid map created from list of x and y geometry_msgs::Points");
 
     occupancy_grid_pub_.publish(map_.map);
     map_metadata_pub_.publish(map_.map.info);
@@ -240,7 +184,7 @@ float MapConverter::getCell(int x, int y)
     float occ;
     float min_x, max_x, min_y, max_y;
 
-    std::vector<Cone>::const_iterator cone;
+    std::vector<geometry_msgs::Point>::const_iterator cone;
     for(cone =cones_.begin(); cone !=cones_.end(); ++cone)
         {
             min_x = cone->x - cone_radius_;
@@ -331,20 +275,16 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "a_node");
     ros::NodeHandle nh("~");
 
-    std::string file_path;
-    nh.getParam("csv_map_path", file_path);
-    std::cout << file_path << std::endl;
+    //std::string file_path;
+    //nh.getParam("csv_map_path", file_path);
+    //std::cout << file_path << std::endl;
 
     std::string output_folder;
     nh.getParam("converted_map_folder", output_folder);
 
-    MapConverter mc(&nh, file_path, output_folder);
-    mc.printData();
+    MapConverter mc(&nh, output_folder);
 
-    mc.createMap();
-    mc.saveMap("map");
-
-    ros::spinOnce();
+    ros::spin();
 
     return 0;
 }

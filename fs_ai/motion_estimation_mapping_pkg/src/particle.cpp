@@ -64,7 +64,6 @@ void Particle::motionUpdate(const Eigen::Vector3f& current_pose, float speed, fl
  */
 void Particle::measurementUpdate(const perception_pkg::Cone& z, const Eigen::Matrix2f& R, SLAM_PHASE slam_phase)
 {
-
     boost::shared_ptr<geometry_msgs::Point> z_ptr(new geometry_msgs::Point(z.location));
     Eigen::Vector2f measurement(getMeasurement(z_ptr));
 
@@ -112,7 +111,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, const Eigen::Mat
     }
 
     Eigen::Vector2f map_feature(z.location.x + mu_(0), z.location.y + mu_(1));
-    if ((best_p < NEW_LANDMARK_THRESH) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.25))
+    if ((best_p < NEW_LANDMARK_THRESH) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.0))
     {
         DataAssociation d;
         d.measurement = measurement;

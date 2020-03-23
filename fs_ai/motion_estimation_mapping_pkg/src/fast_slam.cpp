@@ -32,6 +32,7 @@
 #include <tf/transform_datatypes.h>
 #include <tf/transform_listener.h>
 #include "ekf_localisation.hpp"
+#include <map_converter_pkg/ConvertMap.h>
 
 std::time_t now = std::time(0);
 boost::random::mt19937 rng(static_cast<uint32_t>(now));
@@ -51,6 +52,7 @@ void StateEstimation::initialise()
     //initialise publishers and publishers 
     initialiseSubscribers();
     initialisePublishers();
+    client = nh_.serviceClient<map_converter_pkg::ConvertMap>("convert_map");
 
     //instantiate time variables needed to work out time differences between FastSLAM2.0 iterations
     current_time_ = ros::Time::now();
@@ -123,38 +125,65 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
         //std::cout << "frequency: " << 1/((finish - start).toSec()) << std::endl;
     }
 
+    std::vector<geometry_msgs::Point> map_ante;
     while (ros::ok)
     {
         std::vector<Particle>::iterator p;
-        for (p = particles_.begin(); p != particles_.end(); ++p)
+        int best_idx = 0;
+        int best_weight = -1000;
+        int idx_counter = 0;
+        for (p = particles_.begin(); p != particles_.end(); ++p, ++idx_counter)
         {
-            std::vector<Landmark>::const_iterator lm;
-            for(lm = p->landmarks_.begin(); lm != p->landmarks_.end(); ++lm)
+            if(p->weight_ > best_weight)
             {
-                //add new landmark to landmark vector and to landmark cloud for visualization
-                geometry_msgs::Point32 point;
-                point.x = lm->mu_(0);
-                point.y = lm->mu_(1);
-                point.z = 0.0;
-                landmark_cloud_.points.push_back(point);
-                landmark_cloud_.header.stamp = ros::Time::now();
-                landmark_cloud_.header.frame_id = "track";
-                
-                sensor_msgs::ChannelFloat32 channel;
-                channel.name = "rgb";
-                std::vector<float> colour(landmark_cloud_.points.size(), 255255255);
-                channel.values = colour;
-                std::vector<sensor_msgs::ChannelFloat32> channels(landmark_cloud_.points.size(), channel);
-                landmark_cloud_.channels = channels;
-
-                //publish landmark PointCloud2 message 
-                sensor_msgs::PointCloud2 cloud;
-                sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
-                landmark_cloud_pub_.publish(cloud);
+                best_idx = idx_counter;
+                best_weight = p->weight_;
             }
+        }
+        std::cout << "best index " << best_idx << std::endl;
+        std::vector<Landmark>::const_iterator lm;
+        for(lm = particles_.at(best_idx).landmarks_.begin(); lm != particles_.at(best_idx).landmarks_.end(); ++lm)
+        {
+            //add to map for service request
+            geometry_msgs::Point cone;
+            cone.x = lm->mu_(0);
+            cone.y = lm->mu_(1);
+            cone.z = 0.0;
+            map_ante.push_back(cone);
+            
+            //add new landmark to landmark vector and to landmark cloud for visualization
+            geometry_msgs::Point32 point;
+            point.x = lm->mu_(0);
+            point.y = lm->mu_(1);
+            point.z = 0.0;
+            landmark_cloud_.points.push_back(point);
+            landmark_cloud_.header.stamp = ros::Time::now();
+            landmark_cloud_.header.frame_id = "track";
+            
+            sensor_msgs::ChannelFloat32 channel;
+            channel.name = "rgb";
+            std::vector<float> colour(landmark_cloud_.points.size(), 02550);
+            channel.values = colour;
+            std::vector<sensor_msgs::ChannelFloat32> channels(landmark_cloud_.points.size(), channel);
+            landmark_cloud_.channels = channels;
+
+            //publish landmark PointCloud2 message 
+            sensor_msgs::PointCloud2 cloud;
+            sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
+            landmark_cloud_pub_.publish(cloud);
         }
     }
     as_.setSucceeded();
+
+    //convert Landmark vector to Point vector
+    map_converter_pkg::ConvertMap service;
+    service.request.landmarks = map_ante;
+    if (client.call(service))
+    {
+        ROS_INFO("Service completed.");
+    } else {
+        ROS_ERROR("Failed to call service");
+    }
 }
 
 /**
@@ -564,6 +593,7 @@ void StateEstimation::resampling()
     //uniform distribution object
     boost::random::uniform_real_distribution<float> distribution(0.0, 1.0);
 
+    std::cout << "Neff " << Neff << "; Nmin " << Nmin << std::endl;
     if (Neff < Nmin)
     {
         weights_cumulative << cumulativeSum(weights);
@@ -599,7 +629,7 @@ void StateEstimation::resampling()
 
             //reinitialise the weights so their sum adds up to 1
             particles_.at(i).weight_ = 1.0 / num_particles_;
-/*
+
             std::vector<Landmark>::const_iterator lm;
             for(lm = particles_.at(i).landmarks_.begin(); lm != particles_.at(i).landmarks_.end(); ++lm)
             {
@@ -627,7 +657,7 @@ void StateEstimation::resampling()
                 landmark_cloud_pub_.publish(cloud);
                 
             }
-            */
+            
         }
     }
 }
@@ -676,7 +706,7 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
         slam_path_pub_.publish(slam_path_);
 
         //publish odometry message for slam estimate
-        /*nav_msgs::Odometry est;
+        nav_msgs::Odometry est;
         est.header.stamp = ros::Time::now();
         est.header.frame_id = "track";
         est.child_frame_id = "base_footprint";
@@ -685,7 +715,7 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
         est.pose.pose.position.y = xEst_(1);
         est.pose.pose.position.z = 0.0;
         est.pose.pose.orientation = orientation;
-        slam_estimate_pub_.publish(est);*/
+        slam_estimate_pub_.publish(est);
     }
 
     return xEst_;

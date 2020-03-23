@@ -5,6 +5,10 @@
     <!-- Launches personalised rviz configuration file -->
     <node type="rviz" name="rviz" pkg="rviz" args="-d ../.rviz/default.rviz"/>
 
+    <!--!nclude file="$(find perception_pkg)/launch/lidar.launch"/-->
+
+    <include file="$(find map_converter_pkg)/launch/map_converter_launch.launch"/>
+
     <include file="$(find motion_estimation_mapping_pkg)/launch/track_frame_launcher.launch"/>
 
     <include file="$(find geodetic_to_enu_conversion_pkg)/launch/conversion_launcher.launch"/>

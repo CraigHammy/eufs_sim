@@ -16,6 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
   cmake_modules
   actionlib_msgs
   eufs_msgs
+  map_converter_pkg
   geodetic_to_enu_conversion_pkg
 )
 
@@ -129,6 +130,7 @@ include_directories(
   #include/matplotlib-cpp/
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR}
+  ${map_converter_pkg_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library

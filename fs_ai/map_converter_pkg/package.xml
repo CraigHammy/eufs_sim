@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>map_generator_pkg</name>
+  <name>map_converter_pkg</name>
   <version>0.0.0</version>
-  <description>The map_generator_pkg package</description>
+  <description>The map_converter_pkg package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
@@ -64,6 +64,10 @@
   <build_depend>nav_msgs</build_depend>
   <build_export_depend>nav_msgs</build_export_depend>
   <exec_depend>nav_msgs</exec_depend>
+
+  <build_depend>geometry_msgs</build_depend>
+  <build_export_depend>geometry_msgs</build_export_depend>
+  <exec_depend>geometry_msgs</exec_depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
