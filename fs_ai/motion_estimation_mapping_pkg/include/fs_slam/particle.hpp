@@ -5,6 +5,7 @@
 #include <Eigen/Dense>
 #include <perception_pkg/Cone.h>
 #include <vector>
+#include <sensor_msgs/PointCloud.h>
 #include <Eigen/Core>
 #include "boost/random.hpp"
 #include "ekf_localisation.hpp"
@@ -67,6 +68,13 @@ public:
      * @param R Eigen 2x2 covariance matrix of measurement noise
      */
     Eigen::Vector2f addNewLandmark(const Eigen::Vector2f& ob, const std::string& colour, const Eigen::Matrix2f& R);
+
+    /**
+     * @brief Converts a vector of Landmarks into Points, and add them to PointCloud
+     * @param points Vector to place the landmark positions in 
+     * @param cloud PointCloud used to visualize landmarks 
+     */
+    void convertToPoints(std::vector<geometry_msgs::Point>& points, sensor_msgs::PointCloud& cloud);
 
     //FastSLAM2.0 particle variables 
     float weight_;      

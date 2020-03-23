@@ -1,6 +1,6 @@
 <launch>
-    <node pkg="map_generator_pkg" type="map_converter" name="a_node" output="screen">
-        <param name="csv_map_path" value="$(find map_generator_pkg)/cfg/eufs_gazebo_tracks_small_track.csv"/>
-        <param name="converted_map_folder" value="$(find map_generator_pkg)/test/"/>
+    <node pkg="map_converter_pkg" type="map_converter" name="map_converter_node" output="screen">
+        <param name="csv_map_path" value="$(find map_converter_pkg)/cfg/eufs_gazebo_tracks_small_track.csv"/>
+        <param name="converted_map_folder" value="$(find map_converter_pkg)/test/"/>
     </node>
 </launch>

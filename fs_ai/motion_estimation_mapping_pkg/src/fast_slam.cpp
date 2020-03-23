@@ -52,7 +52,7 @@ void StateEstimation::initialise()
     //initialise publishers and publishers 
     initialiseSubscribers();
     initialisePublishers();
-    client = nh_.serviceClient<map_converter_pkg::ConvertMap>("convert_map");
+    client = nh_.serviceClient<map_converter_pkg::ConvertMap>("/map_converter_node/convert_map");
 
     //instantiate time variables needed to work out time differences between FastSLAM2.0 iterations
     current_time_ = ros::Time::now();
@@ -125,55 +125,43 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
         //std::cout << "frequency: " << 1/((finish - start).toSec()) << std::endl;
     }
 
-    std::vector<geometry_msgs::Point> map_ante;
-    while (ros::ok)
+    //find particle with the highest weight 
+    std::vector<Particle>::iterator p;
+    int best_idx = 0;
+    int best_weight = -1000;
+    int idx_counter = 0;
+    for (p = particles_.begin(); p != particles_.end(); ++p, ++idx_counter)
     {
-        std::vector<Particle>::iterator p;
-        int best_idx = 0;
-        int best_weight = -1000;
-        int idx_counter = 0;
-        for (p = particles_.begin(); p != particles_.end(); ++p, ++idx_counter)
+        if(p->weight_ > best_weight)
         {
-            if(p->weight_ > best_weight)
-            {
-                best_idx = idx_counter;
-                best_weight = p->weight_;
-            }
-        }
-        std::cout << "best index " << best_idx << std::endl;
-        std::vector<Landmark>::const_iterator lm;
-        for(lm = particles_.at(best_idx).landmarks_.begin(); lm != particles_.at(best_idx).landmarks_.end(); ++lm)
-        {
-            //add to map for service request
-            geometry_msgs::Point cone;
-            cone.x = lm->mu_(0);
-            cone.y = lm->mu_(1);
-            cone.z = 0.0;
-            map_ante.push_back(cone);
-            
-            //add new landmark to landmark vector and to landmark cloud for visualization
-            geometry_msgs::Point32 point;
-            point.x = lm->mu_(0);
-            point.y = lm->mu_(1);
-            point.z = 0.0;
-            landmark_cloud_.points.push_back(point);
-            landmark_cloud_.header.stamp = ros::Time::now();
-            landmark_cloud_.header.frame_id = "track";
-            
-            sensor_msgs::ChannelFloat32 channel;
-            channel.name = "rgb";
-            std::vector<float> colour(landmark_cloud_.points.size(), 02550);
-            channel.values = colour;
-            std::vector<sensor_msgs::ChannelFloat32> channels(landmark_cloud_.points.size(), channel);
-            landmark_cloud_.channels = channels;
-
-            //publish landmark PointCloud2 message 
-            sensor_msgs::PointCloud2 cloud;
-            sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
-            landmark_cloud_pub_.publish(cloud);
+            best_idx = idx_counter;
+            best_weight = p->weight_;
         }
     }
-    as_.setSucceeded();
+
+    //generate map of Points and add points to landmark cloud
+    std::vector<geometry_msgs::Point> map_ante;
+    particles_.at(best_idx).convertToPoints(map_ante, landmark_cloud_);
+
+    //convert to PointCloud2 as it is less memory intensive
+    sensor_msgs::PointCloud2 cloud2;
+    sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud2);
+
+    //show pointcloud until command entered correctly
+    bool correct = false;
+    do
+    {   
+        //publish landmark PointCloud2 message 
+        landmark_cloud_pub_.publish(cloud2);
+
+        //user input
+        std::string input;
+        std::cout << "Continue? Enter 'yes' or 'no'.\n" ;
+        std::getline(std::cin, input);
+        if (input == "yes")
+            correct = true;
+    }
+    while (!correct);
 
     //convert Landmark vector to Point vector
     map_converter_pkg::ConvertMap service;
@@ -184,6 +172,12 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
     } else {
         ROS_ERROR("Failed to call service");
     }
+
+    as_.setSucceeded();
+
+    //continue running the ekf 
+    while (ros::ok())
+        prediction();
 }
 
 /**
@@ -231,11 +225,6 @@ void StateEstimation::wheelSpeedCallback(const eufs_msgs::WheelSpeedsStamped::Co
     //update RobotCommand variable 
     u_.speed = (right_back + left_back) / 2.0;
     u_.steering_angle = msg->steering;
-
-    if ((u_.speed < 0.01) && (particles_.at(0).landmarks_.size() > 30)) {
-        ROS_WARN("lap closure detected");
-        lap_closure_detected_ = true;
-    }
 }
 
 /**
@@ -306,10 +295,7 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
 
     //if detected cone is orange, lap closure detected
     std::string colour = msg->colour;
-    std::cout << colour << std::endl;
     if ((colour == "orange") && (particles_.at(0).landmarks_.size() > 20)) {
-        ROS_WARN("lap closure detected");
-        std::cout << msg->colour << std::endl;
         lap_closure_detected_ = true;
     }
     
@@ -593,7 +579,6 @@ void StateEstimation::resampling()
     //uniform distribution object
     boost::random::uniform_real_distribution<float> distribution(0.0, 1.0);
 
-    std::cout << "Neff " << Neff << "; Nmin " << Nmin << std::endl;
     if (Neff < Nmin)
     {
         weights_cumulative << cumulativeSum(weights);
@@ -619,8 +604,6 @@ void StateEstimation::resampling()
 
         //update particles with resampled particles
         std::vector<Particle> particles_copy(particles_);
-        landmark_cloud_.points.clear();
-
         for (int i = 0; i != indexes.size(); ++i)
         {
             particles_.at(i).mu_ = particles_copy.at(indexes(i)).mu_;
@@ -628,36 +611,7 @@ void StateEstimation::resampling()
             particles_.at(i).landmarks_ = particles_copy.at(indexes(i)).landmarks_;
 
             //reinitialise the weights so their sum adds up to 1
-            particles_.at(i).weight_ = 1.0 / num_particles_;
-
-            std::vector<Landmark>::const_iterator lm;
-            for(lm = particles_.at(i).landmarks_.begin(); lm != particles_.at(i).landmarks_.end(); ++lm)
-            {
-                
-                //add new landmark to landmark vector and to landmark cloud for visualization
-                geometry_msgs::Point32 point;
-                point.x = lm->mu_(0);
-                point.y = lm->mu_(1);
-                point.z = 0.0;
-                landmark_cloud_.points.push_back(point);
-                landmark_cloud_.header.stamp = ros::Time::now();
-                landmark_cloud_.header.frame_id = "track";
-                
-                sensor_msgs::ChannelFloat32 channel;
-                channel.name = "rgb";
-                std::vector<float> colour(landmark_cloud_.points.size(), 255255255);
-                channel.values = colour;
-                std::vector<sensor_msgs::ChannelFloat32> channels(landmark_cloud_.points.size(), channel);
-                landmark_cloud_.channels = channels;
-
-                //publish landmark PointCloud2 message 
-                sensor_msgs::PointCloud2 cloud;
-                sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
-                ROS_INFO("hello");
-                landmark_cloud_pub_.publish(cloud);
-                
-            }
-            
+            particles_.at(i).weight_ = 1.0 / num_particles_;       
         }
     }
 }
@@ -677,17 +631,42 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
     std::vector<Particle>::iterator p;
     
     int j = 1;
+    std::vector<float> distances;
     for (p = particles_.begin(); p != particles_.end(); ++p, ++j)
     {
         if (p->weight_ != p->weight_)
         {
             ROS_ERROR("NaN weight value");
-            exit(0);
+            break;
         }
         xEst_(0) += p->weight_ * p->mu_(0);
         xEst_(1) += p->weight_ * p->mu_(1);
         xEst_(2) = angleWrap(xEst_(2) + p->weight_ * p->mu_(2));
+
+        //append euclidean distance to starting point
+        distances.push_back((p->mu_ - Eigen::Vector3f::Zero()).norm());     
     }
+
+    distances.clear();
+
+    xEst_ = Eigen::Vector3f::Zero();
+    float weight = 1 / num_particles_;
+    for (p = particles_.begin(); p != particles_.end(); ++p, ++j)
+    {
+        xEst_(0) += weight * p->mu_(0);
+        xEst_(1) += weight * p->mu_(1);
+        xEst_(2) = angleWrap(xEst_(2) + weight * p->mu_(2));
+
+        //append euclidean distance to starting point
+        distances.push_back((p->mu_ - Eigen::Vector3f::Zero()).norm());     
+    }
+
+     //check for loop closure 
+    float average = std::accumulate(distances.begin(), distances.end(), 0.0) / num_particles_;
+    std::cout << "number of landmarks: " << particles_.at(0).landmarks_.size() << std::endl; 
+    if ((average < 1.0) && (particles_.at(0).landmarks_.size() > 20))
+        lap_closure_detected_ = true;
+   
 
     //check if visualization is requested by user
     if (vis_)

@@ -30,9 +30,10 @@
 class MapConverter
 {
 public:
-    MapConverter(ros::NodeHandle *nh, std::string folder): folder_name_(folder), nh_(*nh) {};
 
-    MapConverter(ros::NodeHandle *nh, std::string name, std::string folder, char delim = ','): folder_name_(folder), file_name_(name), delimiter_(delim), nh_(*nh)
+    MapConverter(ros::NodeHandle* nh,  std::string name, std::string folder): nh_(*nh), folder_name_(folder), file_name_(name) {initialise();};
+
+    MapConverter(ros::NodeHandle* nh, char delim, std::string name, std::string folder): folder_name_(folder), file_name_(name), delimiter_(delim), nh_(*nh)
     { readCSV(); initialise(); generateMapBoundaries(); };
 
     

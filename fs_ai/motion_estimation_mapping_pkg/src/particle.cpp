@@ -111,6 +111,12 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, const Eigen::Mat
     }
 
     Eigen::Vector2f map_feature(z.location.x + mu_(0), z.location.y + mu_(1));
+    
+    if (best_p == 0) {
+        //ROS_WARN("zero");
+        return;
+    }
+    //std::cout << "innovation mean\n" << best_innov_mean << std::endl;
     if ((best_p < NEW_LANDMARK_THRESH) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.0))
     {
         DataAssociation d;
@@ -124,13 +130,6 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, const Eigen::Mat
         d.measurement = measurement;
         d.landmark_id = best_arg;
         known_features_.push_back(d);
-    }
-
-    if (slam_phase == MAP_BUILDING) {
-        ;//do stuff
-    }
-    else if (slam_phase == LOCALIZATION) {
-        ;//do stuff
     }
 }
 
@@ -256,6 +255,7 @@ float Particle::dataAssociations(const Eigen::Matrix2f& lm_innov_cov, const Eige
     double numerator = exp(-0.5 * new_innov_mean.transpose() * lm_innov_cov.inverse() * new_innov_mean);
     double denominator = 1 / sqrtf(2 * M_PI * lm_innov_cov.determinant());
     float p = numerator / denominator;
+    //std::cout << "assocnum: " << p << std::endl; 
     return p;
 }
 
@@ -310,4 +310,32 @@ void Particle::proposalDistribution(const Eigen::Matrix2f& lm_innov_cov, const E
 
     mu_ += sigma_ * Hv.transpose() * lm_innov_cov.inverse() * lm_innov_mean;
     mu_(2) = angleWrap(mu_(2));
+}
+
+/**
+ * @brief Converts a vector of Landmarks into Points, and add them to PointCloud
+ * @param points Vector to place the landmark positions in 
+ * @param cloud PointCloud used to visualize landmarks 
+ */
+void Particle::convertToPoints(std::vector<geometry_msgs::Point>& points, sensor_msgs::PointCloud& cloud)
+{
+    std::vector<Landmark>::const_iterator lm;
+        for(lm = landmarks_.begin(); lm != landmarks_.end(); ++lm)
+        {
+            //add to map for service request
+            geometry_msgs::Point cone;
+            cone.x = lm->mu_(0);
+            cone.y = lm->mu_(1);
+            cone.z = 0.0;
+            points.push_back(cone);
+            
+            //add new landmark to cloud
+            geometry_msgs::Point32 point;
+            point.x = lm->mu_(0);
+            point.y = lm->mu_(1);
+            point.z = 0.0;
+            cloud.points.push_back(point);
+            cloud.header.stamp = ros::Time::now();
+            cloud.header.frame_id = "track";
+        }
 }

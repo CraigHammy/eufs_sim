@@ -19,10 +19,10 @@
         <param name="wheel_base"      type="double" value="1.53"/>
         <param name="wheel_diameter"  type="double" value="0.505"/>
 
-        <param name="slam_control_noise_velocity"               type="double" value="1.0"/>
-        <param name="slam_control_noise_steering_angle"         type="double" value="2.5"/>
-        <param name="slam_measurement_noise_euclidean_distance" type="double" value="0.5"/>
-        <param name="slam_measurement_noise_angle_difference"   type="double" value="2.5"/>
+        <param name="slam_control_noise_velocity"               type="double" value="3.0"/>
+        <param name="slam_control_noise_steering_angle"         type="double" value="10.0"/>
+        <param name="slam_measurement_noise_euclidean_distance" type="double" value="1.0"/>
+        <param name="slam_measurement_noise_angle_difference"   type="double" value="20.0"/>
 
         <param name="resampling_ratio_particles"                type="double" value="0.75"/>
 

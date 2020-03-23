@@ -18,6 +18,7 @@
 #include "map_converter.hpp"
 
 
+
 void MapConverter::printData()
 {
     std::vector<geometry_msgs::Point>::const_iterator cone;
@@ -33,10 +34,10 @@ void MapConverter::generateMapBoundaries()
     float highest = -1000;
 
     std::vector<geometry_msgs::Point>::const_iterator cone;
-    for(cone =cones_.begin(); cone !=cones_.end(); ++cone)
+    for(cone = cones_.begin(); cone != cones_.end(); ++cone)
     {
         if (abs(cone->x) > highest)
-            highest = abs(cone->y);
+            highest = abs(cone->x);
         else if (abs(cone->x) > highest)
             highest = abs(cone->y); 
     }
@@ -65,13 +66,18 @@ bool MapConverter::mapCallback(map_converter_pkg::ConvertMap::Request& req, map_
     ROS_INFO("Converting map");
     cones_ = req.landmarks;
 
-    initialise(); 
     generateMapBoundaries();
     createMap();
     
     if(got_map_)
     {
+        //load OccupancyGrid to service response reference object
         res = map_;
+
+        //save map to folder_name/file_name location
+        saveMap(file_name_);
+
+        //declare service finished 
         return true;
         ROS_INFO("Service finished.");
     }
@@ -272,7 +278,7 @@ void MapConverter::saveMap(const std::string& map_name)
 
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "a_node");
+    ros::init(argc, argv, "map_converter_node");
     ros::NodeHandle nh("~");
 
     //std::string file_path;
@@ -282,7 +288,7 @@ int main(int argc, char** argv)
     std::string output_folder;
     nh.getParam("converted_map_folder", output_folder);
 
-    MapConverter mc(&nh, output_folder);
+    MapConverter mc(&nh, "map", output_folder);
 
     ros::spin();
 
