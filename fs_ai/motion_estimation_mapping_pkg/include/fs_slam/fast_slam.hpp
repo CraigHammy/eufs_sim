@@ -87,12 +87,6 @@ public:
      * @return A 3D Eigen Vector representing the final SLAM estimate for the current iteration
      */
     Eigen::Vector3f calculateFinalEstimate();
-
-    /**
-     * @brief Calculates the squared norm of the difference between the observations based on the map and on sensor data
-     * @return Squared norm of difference between observations based on map and on sensor data  
-     */
-    float squaredNormDifference();
     
 private:
     /**
