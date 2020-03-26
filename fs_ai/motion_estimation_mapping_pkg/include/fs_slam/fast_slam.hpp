@@ -17,6 +17,7 @@
 #include <motion_estimation_mapping_pkg/FastSlamAction.h>
 #include <sensor_msgs/PointCloud.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <sensor_msgs/LaserScan.h>
 #include "ekf_localisation.hpp"
 #include <sensor_msgs/Imu.h>
 #include <geodetic_to_enu_conversion_pkg/Gps.h>
@@ -140,6 +141,12 @@ private:
      */
     void imuCallback(const sensor_msgs::Imu::ConstPtr& msg);
 
+    /**
+     * @brief Callback for receiving LaserScan data 
+     * @param msg A LaserScan message
+     */
+    void scanCallback(const sensor_msgs::LaserScan::ConstPtr& msg);
+
     boost::random::mt19937 rng;
 
     //action server variables 
@@ -159,6 +166,7 @@ private:
     ros::Subscriber gps_sub_;
     ros::Subscriber imu_sub_;
     ros::Subscriber ground_truth_cone_sub_;
+    ros::Subscriber scan_sub_;
 
     //ROS Service Client
     ros::ServiceClient client;
@@ -192,6 +200,9 @@ private:
     //control and measurement noise covariance matrix coefficients
     float sigmaV, sigmaG;
     float sigmaR, sigmaB;
+
+    //LaserScan intensities
+    std::vector<float> scan_;
 
     //estimate variables 
     Eigen::Vector3f xEst_;    

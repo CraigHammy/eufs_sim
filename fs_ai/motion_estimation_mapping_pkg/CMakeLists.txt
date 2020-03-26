@@ -143,6 +143,9 @@ add_library(particle
 add_library(slam_utils
   src/slam_utils.cpp
 )
+add_library(montecarlo_localisation
+  src/montecarlo_localisation.cpp
+)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -177,14 +180,17 @@ target_link_libraries(global_frame_broadcaster
 target_link_libraries(slam_utils
   ${catkin_LIBRARIES} 
 )
+target_link_libraries(montecarlo_localisation
+  ${catkin_LIBRARIES} slam_utils
+)
 target_link_libraries(particle
-  ${catkin_LIBRARIES} slam_utils ekf_localisation
+  ${catkin_LIBRARIES} slam_utils ekf_localisation montecarlo_localisation
 )
 target_link_libraries(ekf_localisation
   ${catkin_LIBRARIES} slam_utils
 )
 target_link_libraries(fast_slam
-  ${catkin_LIBRARIES} particle slam_utils ekf_localisation
+  ${catkin_LIBRARIES} particle slam_utils ekf_localisation montecarlo_localisation
 )
 target_link_libraries(action_client
   ${catkin_LIBRARIES}

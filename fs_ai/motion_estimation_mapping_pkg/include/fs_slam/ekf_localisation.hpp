@@ -20,6 +20,7 @@ class EKF
 public:
     /**
      * @brief Constructor for the Extende Kalman Filter class
+     * @param private_nh Private NodeHandle
      */
     EKF(ros::NodeHandle* private_nh): private_nh_(private_nh) {initialise();};
 

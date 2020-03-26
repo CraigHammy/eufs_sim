@@ -33,6 +33,7 @@
 #include <tf/transform_listener.h>
 #include "ekf_localisation.hpp"
 #include <map_converter_pkg/ConvertMap.h>
+#include "montecarlo_localisation.hpp"
 
 std::time_t now = std::time(0);
 boost::random::mt19937 rng(static_cast<uint32_t>(now));
@@ -103,6 +104,7 @@ void StateEstimation::initialiseSubscribers()
     ground_truth_cone_sub_ = nh_.subscribe<visualization_msgs::MarkerArray>("/ground_truth/cones/viz", 1, boost::bind(&StateEstimation::groundTruthConeCallback, this, _1));
     gps_sub_ = nh_.subscribe<geodetic_to_enu_conversion_pkg::Gps>("/odometry/gps", 1, boost::bind(&StateEstimation::gpsCallback, this, _1));
     imu_sub_ = nh_.subscribe<sensor_msgs::Imu>("/imu", 1, boost::bind(&StateEstimation::imuCallback, this, _1));
+    scan_sub_ = nh_.subscribe<sensor_msgs::LaserScan>("/laserscan", 1, boost::bind(&StateEstimation::scanCallback, this, _1));
 }
 
 /**
@@ -165,19 +167,39 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
 
     //convert Landmark vector to Point vector
     map_converter_pkg::ConvertMap service;
+    nav_msgs::OccupancyGrid grid_map;
     service.request.landmarks = map_ante;
     if (client.call(service))
     {
+        grid_map = service.response.map;
         ROS_INFO("Service completed.");
     } else {
         ROS_ERROR("Failed to call service");
     }
 
-    as_.setSucceeded();
+    std::vector<Particle> new_particles;
+    for (p = particles_.begin(); p != particles_.end(); ++p)
+    {
+        EKF ekf(&private_nh_);
+        boost::shared_ptr<nav_msgs::OccupancyGrid> map_ptr(new nav_msgs::OccupancyGrid(grid_map));
+        MCL mcl(&private_nh_, map_ptr);
+        Particle particle(p->mu_, p->mu_pred_, p->sigma_, &ekf, &mcl);
+        new_particles.push_back(particle);
+    }
+    particles_ = new_particles;
 
-    //continue running the ekf 
-    while (ros::ok())
+    while(ros::ok())
+    {
+        //Localization using Monte Carlo Algorithm 
         prediction();
+        for (p = particles_.begin(); p != particles_.end(); ++p)
+        {
+            p->weight_ = p->mcl_.amcl_estimation_step(p->mu_, scan_);
+        }
+        resampling();
+    }
+
+    as_.setSucceeded();
 }
 
 /**
@@ -350,6 +372,14 @@ void StateEstimation::imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
     imu_yaw_ = yaw;
 }
 
+/**
+ * @brief Callback for receiving LaserScan data 
+ * @param msg A LaserScan message
+ */
+void StateEstimation::scanCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
+{
+    scan_ = msg->ranges;
+}
 
 /**
  * @brief Sampling step: applying the motion model to every particle
