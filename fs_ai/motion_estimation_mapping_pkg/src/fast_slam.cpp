@@ -192,6 +192,10 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
     {
         //Localization using Monte Carlo Algorithm 
         prediction();
+
+        //UPDATE COVARIANCE MATRIX AND THEN SAMPLE FROM THAT DISTRUBUTION -> SHOULD WORK THEN UNLESS BUGS
+
+
         for (p = particles_.begin(); p != particles_.end(); ++p)
         {
             p->weight_ = p->mcl_.amcl_estimation_step(p->mu_, scan_);

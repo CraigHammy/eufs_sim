@@ -6,6 +6,7 @@
 #include <Eigen/Dense>
 #include <vector>
 #include "slam_utils.hpp"
+#include <visualization_msgs/MarkerArray.h>
 #include <nav_msgs/OccupancyGrid.h>
 
 struct Observations
@@ -54,6 +55,10 @@ private:
     float min_range_, max_range_;
     float min_angle_, max_angle_;
     float angle_increment_;
+
+    //visualization variables
+    visualization_msgs::MarkerArray filtered_scan_;
+    ros::Publisher filtered_scan_pub_;
 
     /**
      * @brief Initialises parameters and variables needed for the Monte Carlo Localisation

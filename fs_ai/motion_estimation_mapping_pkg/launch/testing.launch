@@ -1,0 +1,14 @@
+<launch>
+    <include file="$(find motion_estimation_mapping_pkg)/launch/track_frame_launcher.launch"/>
+
+    <include file="$(find perception_pkg)/launch/lidar.launch"/>
+    
+    <!--include file="$(find geodetic_to_enu_conversion_pkg)/launch/conversion_launcher.launch"/-->
+
+    <arg name="map" default="$(find map_converter_pkg)/test/map.yaml"/>
+   <node name="map_server" pkg="map_server" type="map_server" args=" $(arg map)" required="true" output="screen">
+      <param name="frame_id" value="/track" />
+  </node>
+
+    <node pkg="motion_estimation_mapping_pkg" type="mcl_tests" name="testing_node" output="screen"/>
+</launch>

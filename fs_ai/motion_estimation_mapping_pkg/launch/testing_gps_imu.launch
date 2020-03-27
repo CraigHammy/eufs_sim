@@ -1,5 +1,0 @@
-<launch>
-    <include file="$(find motion_estimation_mapping_pkg)/launch/track_frame_launcher.launch"/>
-    <include file="$(find geodetic_to_enu_conversion_pkg)/launch/conversion_launcher.launch"/>
-    <node pkg="motion_estimation_mapping_pkg" type="gps_imu_tests" name="test_node" output="screen"/>
-</launch>

@@ -3,6 +3,8 @@
 #include <Eigen/Dense>
 #include <vector>
 #include "montecarlo_localisation.hpp"
+#include <visualization_msgs/MarkerArray.h>
+#include <visualization_msgs/Marker.h>
 #include "slam_utils.hpp"
 #include <limits>
 
@@ -16,6 +18,8 @@ void MCL::initialise()
     private_nh_->getParam("scan_min_angle", min_range_);
     private_nh_->getParam("scan_max_angle", max_range_);
     private_nh_->getParam("scan_angle_increment", angle_increment_);
+
+    filtered_scan_pub_ = private_nh_->advertise<visualization_msgs::MarkerArray>("/filtered_scan", 1);
 }
 
 /**
@@ -28,6 +32,8 @@ float MCL::amcl_estimation_step(const Eigen::Vector3f& xEst, const std::vector<f
 {
     //do it for every particle 
     std::vector<float> z(filterScan(xEst, scan).ranges);
+    filtered_scan_pub_.publish(filtered_scan_);
+    /*
     std::vector<float> z_pred(predictObservation(xEst, scan.size()).ranges);
 
     //calculate the difference 
@@ -40,7 +46,7 @@ float MCL::amcl_estimation_step(const Eigen::Vector3f& xEst, const std::vector<f
 
     //squared norm of the difference
     float error = powf(differences.norm(), 2); 
-    return expf(error);
+    return expf(error);*/
 }
 
 /**
@@ -122,6 +128,24 @@ Observations MCL::filterScan(const Eigen::Vector3f xEst, const std::vector<float
         float final_dist = sqrtf(powf(final_x, 2) + powf(final_y, 2));
         ranges.push_back(final_dist);
         angles.push_back(final_yaw);
+
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = "base_footprint";
+        marker.header.stamp = ros::Time::now();
+        marker.id = ranges.size() - 1;
+        marker.type = visualization_msgs::Marker::CUBE;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.pose.position.x = final_dist*cosf(final_yaw);
+        marker.pose.position.y = final_dist*sinf(final_yaw);
+        marker.pose.position.z = 0;
+        marker.scale.x = 0.15;
+        marker.scale.y = 0.15;
+        marker.scale.z = 0.15;
+        marker.color.r = 0.0f;
+        marker.color.g = 0.0f;
+        marker.color.b = 1.0f;
+        marker.color.a = 1.0;
+        filtered_scan_.markers.push_back(marker);
 
         //remove all elements for next iteration
         temp.clear();
