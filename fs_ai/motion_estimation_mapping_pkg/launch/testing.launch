@@ -1,7 +1,7 @@
 <launch>
-    <include file="$(find motion_estimation_mapping_pkg)/launch/track_frame_launcher.launch"/>
+    <node type="rviz" name="rviz" pkg="rviz" args="-d ../.rviz/default.rviz"/>
 
-    <include file="$(find perception_pkg)/launch/lidar.launch"/>
+    <include file="$(find motion_estimation_mapping_pkg)/launch/track_frame_launcher.launch"/>
     
     <!--include file="$(find geodetic_to_enu_conversion_pkg)/launch/conversion_launcher.launch"/-->
 
@@ -10,5 +10,12 @@
       <param name="frame_id" value="/track" />
   </node>
 
-    <node pkg="motion_estimation_mapping_pkg" type="mcl_tests" name="testing_node" output="screen"/>
+    <node pkg="motion_estimation_mapping_pkg" type="mcl_tests" name="testing_node" output="screen">
+        <param name="scan_min_range"        value="0.10000000149"       type="double"/>
+        <param name="scan_max_range"        value="10.0"                type="double"/>
+        <param name="scan_min_angle"        value="-1.57079601288"      type="double"/>
+        <param name="scan_max_angle"        value="1.57079601288"       type="double"/>
+        <param name="scan_angle_increment"  value="0.00436111120507"    type="double"/>
+
+    </node>
 </launch>

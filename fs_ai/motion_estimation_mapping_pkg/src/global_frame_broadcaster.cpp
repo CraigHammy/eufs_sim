@@ -24,7 +24,7 @@ public:
      */
     void initialise()
     {
-        slam_sub_ = nh_.subscribe<nav_msgs::Odometry>("/slam_estimate", 1, boost::bind(&WorldFrameBroadcaster::slam_callback, this, _1));
+        slam_sub_ = nh_.subscribe<nav_msgs::Odometry>("/ground_truth/odom", 1, boost::bind(&WorldFrameBroadcaster::slam_callback, this, _1));
     }
 
     /**

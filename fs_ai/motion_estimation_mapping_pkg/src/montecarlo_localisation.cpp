@@ -7,6 +7,7 @@
 #include <visualization_msgs/Marker.h>
 #include "slam_utils.hpp"
 #include <limits>
+#include <cmath>
 
 /**
  * @brief Initialises parameters and variables needed for the Extended Kalman Filter
@@ -15,11 +16,12 @@ void MCL::initialise()
 {
     private_nh_->getParam("scan_min_range", min_range_);
     private_nh_->getParam("scan_max_range", max_range_);
-    private_nh_->getParam("scan_min_angle", min_range_);
-    private_nh_->getParam("scan_max_angle", max_range_);
+    private_nh_->getParam("scan_min_angle", min_angle_);
+    private_nh_->getParam("scan_max_angle", max_angle_);
     private_nh_->getParam("scan_angle_increment", angle_increment_);
 
     filtered_scan_pub_ = private_nh_->advertise<visualization_msgs::MarkerArray>("/filtered_scan", 1);
+    predicted_scan_pub_ = private_nh_->advertise<visualization_msgs::MarkerArray>("/predicted_scan", 1);
 }
 
 /**
@@ -33,9 +35,10 @@ float MCL::amcl_estimation_step(const Eigen::Vector3f& xEst, const std::vector<f
     //do it for every particle 
     std::vector<float> z(filterScan(xEst, scan).ranges);
     filtered_scan_pub_.publish(filtered_scan_);
-    /*
+    
     std::vector<float> z_pred(predictObservation(xEst, scan.size()).ranges);
-
+    predicted_scan_pub_.publish(predicted_scan_);
+/*
     //calculate the difference 
     Eigen::VectorXf differences;
     for(int i = 0; i != z.size(); ++i)
@@ -53,7 +56,7 @@ float MCL::amcl_estimation_step(const Eigen::Vector3f& xEst, const std::vector<f
  * @brief Uses a transform listener to return the transformation matrix from the base_footprint to the velodyne frame
  * @return Eigen 3D transformation matrix 
  */
-Eigen::Matrix3f getBaseToVelodyneTF()
+Eigen::Matrix3f MCL::getBaseToVelodyneTF()
 {
     //get transformation from base link to velodyne sensor 
     static tf::TransformListener listener;
@@ -96,18 +99,42 @@ Observations MCL::filterScan(const Eigen::Vector3f xEst, const std::vector<float
     //iterate over laser scan intensity message
     std::vector<float> ranges, angles;
     std::vector<float> temp;
-    for(int i = 0; i != scan.size(); ++i)
+
+    for(int i = 1; i != scan.size(); ++i)
     {
+        float current_scan, previous_scan;
+        if (std::isinf(scan[i]))
+            current_scan = 11.0;
+        else 
+            current_scan = scan[i];
+        if (std::isinf(scan[i-1]))
+            previous_scan = 11.0;
+        else
+            previous_scan = scan[i-1];
+        
         //if scan found, there will be other ones belonging to same cone
-        while ((scan[i] < max_range_) && (scan[i] > min_range_) && (abs(scan[i] - scan[i-1]) < 0.4))
+        if ((current_scan < max_range_) && (current_scan > min_range_))
         {
-            //add all intensity values belonging to same cone from left to right
-            temp.push_back(scan[i]);
-        }
+            if (temp.size() == 0)
+            {
+                //add all intensity values belonging to same cone from left to right
+                temp.push_back(current_scan);
+                continue;
+            }
+            else if ((temp.size() > 0) && (fabs(current_scan - previous_scan) < 0.4))
+            {
+                //add all intensity values belonging to same cone from left to right
+                temp.push_back(current_scan);
+                continue;
+            }
+        } 
+
+        if (temp.size() == 0)
+            continue;
         
         //add to filtered scan, the middle point from all the individual cone intensity scans
         float dist = temp[int(temp.size() / 2)];
-        float yaw = -min_angle_ + i * angle_increment_;
+        float yaw = min_angle_ + (i - int(temp.size() / 2)) * angle_increment_;
 
        //location of cone in x and y coordinates
         float x = dist * cosf(yaw);
@@ -121,7 +148,7 @@ Observations MCL::filterScan(const Eigen::Vector3f xEst, const std::vector<float
         Eigen::Matrix3f t3(t1 * t2);
         float final_x = t3(0, 2);
         float final_y = t3(1, 2);
-        float final_yaw = asinf(t3(1, 0));
+        float final_yaw = atan2f(final_y, final_x);
         final_yaw = angleWrap(final_yaw);
 
         //euclidean distance and yaw from robot to cone
@@ -138,9 +165,9 @@ Observations MCL::filterScan(const Eigen::Vector3f xEst, const std::vector<float
         marker.pose.position.x = final_dist*cosf(final_yaw);
         marker.pose.position.y = final_dist*sinf(final_yaw);
         marker.pose.position.z = 0;
-        marker.scale.x = 0.15;
-        marker.scale.y = 0.15;
-        marker.scale.z = 0.15;
+        marker.scale.x = 0.07;
+        marker.scale.y = 0.07;
+        marker.scale.z = 0.07;
         marker.color.r = 0.0f;
         marker.color.g = 0.0f;
         marker.color.b = 1.0f;
@@ -150,7 +177,6 @@ Observations MCL::filterScan(const Eigen::Vector3f xEst, const std::vector<float
         //remove all elements for next iteration
         temp.clear();
     }
-
     Observations obs;
     obs.ranges = ranges;
     obs.angles = angles;
@@ -168,45 +194,84 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
     float prev_dist, prev_yaw;
     std::vector<float> ranges, angles;
 
+    ROS_WARN("hello1");
     for(int i = 0; i < num_intensities; ++i)
     {
-        float curr_yaw = xEst(2) + (-min_angle_ + i * angle_increment_);
+        ROS_WARN("hello2");
+        float curr_yaw = xEst(2) + (min_angle_ + i * angle_increment_);
         float dist = min_range_;
 
         //ray tracing for each angle
         while (dist != max_range_)
         {
+            ROS_WARN("hello3");
             float x = xEst(0) + dist * cosf(curr_yaw);
             float y = xEst(1) + dist * sinf(curr_yaw);
 
-            if (x > max_range_ || x < -max_range_ || y > max_range_ || y < 0)
+            if (x > max_range_ || x < 0 || y > max_range_ || y < -max_range_)
                 break;
             
+            ROS_WARN("hello4");
+            
             //get cell number from pose
-            int cell_x = (x / map_.info.resolution) + (map_.info.width / 2);
-            int cell_y = (y / map_.info.resolution) + (map_.info.height / 2);
+            //int cell_x = (x / map_.info.resolution) + (map_.info.width / 2);
+            //int cell_y = (y / map_.info.resolution) + (map_.info.height / 2);
+
+            std::cout << "x " << x << " y " << y << std::endl;
+            std::cout << "res " << map_.info.resolution << std::endl;
+            std::cout << "origin " << map_.info.origin.position.x << "," << map_.info.origin.position.y << std::endl;
+
+            int cell_x = (x - map_.info.origin.position.x) / map_.info.resolution;
+            int cell_y = (x - map_.info.origin.position.y) / map_.info.resolution;
+
+            ROS_WARN("hello5");
 
             //get occupancy grid map array index 
+            std::cout << "cell x " << cell_x << std::endl;
+            std::cout << "cell y " << cell_y << std::endl;
             int idx = map_.info.width * cell_x + cell_y;
+            std::cout << "map index " << idx << std::endl;
+            std::cout << "map array size " << map_.data.size() << std::endl;
 
             //check if cell is not free
             if (map_.data[idx] < 0 || map_.data[idx] > 25)
             {
+                ROS_WARN("hello6");
                 float final_dist, final_yaw;
                 //check if the previous is the neighbouring cell
                 if (fabs(curr_yaw - prev_yaw) == angle_increment_)
                 {
+                    ROS_WARN("hello7");
                     final_dist = (dist + prev_dist) / 2.0;
                     final_yaw = (curr_yaw + prev_yaw) / 2.0;
                 } 
                 else 
                 {
+                    ROS_WARN("hello8");
                     final_dist = dist;
                     final_yaw = curr_yaw;
                 }
+                ROS_WARN("hello9");
+                visualization_msgs::Marker marker;
+                marker.header.frame_id = "base_footprint";
+                marker.header.stamp = ros::Time::now();
+                marker.id = ranges.size() - 1;
+                marker.type = visualization_msgs::Marker::CUBE;
+                marker.action = visualization_msgs::Marker::ADD;
+                marker.pose.position.x = final_dist*cosf(final_yaw);
+                marker.pose.position.y = final_dist*sinf(final_yaw);
+                marker.pose.position.z = 0;
+                marker.scale.x = 0.07;
+                marker.scale.y = 0.07;
+                marker.scale.z = 0.07;
+                marker.color.r = 0.0f;
+                marker.color.g = 1.0f;
+                marker.color.b = 0.0f;
+                marker.color.a = 1.0;
+                predicted_scan_.markers.push_back(marker);
+                ROS_WARN("hello10");
                 ranges.push_back(final_dist);
                 angles.push_back(final_yaw);
-
                 prev_yaw = curr_yaw;
                 prev_dist = dist;
                 break;

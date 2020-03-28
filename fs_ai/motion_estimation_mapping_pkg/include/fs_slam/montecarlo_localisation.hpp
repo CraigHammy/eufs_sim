@@ -58,7 +58,9 @@ private:
 
     //visualization variables
     visualization_msgs::MarkerArray filtered_scan_;
+    visualization_msgs::MarkerArray predicted_scan_;
     ros::Publisher filtered_scan_pub_;
+    ros::Publisher predicted_scan_pub_;
 
     /**
      * @brief Initialises parameters and variables needed for the Monte Carlo Localisation
@@ -71,7 +73,7 @@ private:
      * @param scan Intensity array of the LaserScan message
      * @return Filtered ranges and angles vector 
      */
-    Observations MCL::filterScan(const Eigen::Vector3f xEst, const std::vector<float>& scan);
+    Observations filterScan(const Eigen::Vector3f xEst, const std::vector<float>& scan);
 
     /**
      * @brief Uses a transform listener to return the transformation matrix from the base_footprint to the velodyne frame
@@ -85,7 +87,7 @@ private:
      * @param num_intensities The size of the scans intensity vector
      * @return Predicted ranges and angles vector 
      */
-    Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intensities);
+    Observations predictObservation(const Eigen::Vector3f& xEst, int num_intensities);
 };
 
 #endif

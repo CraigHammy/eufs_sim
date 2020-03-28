@@ -159,6 +159,7 @@ add_executable(global_frame_broadcaster src/global_frame_broadcaster.cpp)
 add_executable(fast_slam src/fast_slam.cpp)
 add_executable(action_client src/action_client.cpp)
 add_executable(gps_imu_tests src/gps_imu_tests.cpp)
+add_executable(mcl_tests src/mcl_tests.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -172,6 +173,7 @@ add_dependencies(global_frame_broadcaster ${global_frame_broadcaster_EXPORTED_TA
 add_dependencies(fast_slam ${fast_slam_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(action_client ${action_client_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(gps_imu_tests ${gps_imu_tests_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(mcl_tests ${mcl_tests_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(global_frame_broadcaster
@@ -198,6 +200,11 @@ target_link_libraries(action_client
 target_link_libraries(gps_imu_tests
   ${catkin_LIBRARIES}
 )
+target_link_libraries(mcl_tests
+  ${catkin_LIBRARIES}
+  montecarlo_localisation
+)
+
 
 #############
 ## Install ##
