@@ -33,8 +33,8 @@ void MCL::initialise()
 float MCL::amcl_estimation_step(const Eigen::Vector3f& xEst, const std::vector<float>& scan)
 {
     //do it for every particle 
-    std::vector<float> z(filterScan(xEst, scan).ranges);
-    filtered_scan_pub_.publish(filtered_scan_);
+    //std::vector<float> z(filterScan(xEst, scan).ranges);
+    //filtered_scan_pub_.publish(filtered_scan_);
     
     std::vector<float> z_pred(predictObservation(xEst, scan.size()).ranges);
     predicted_scan_pub_.publish(predicted_scan_);
@@ -192,46 +192,54 @@ Observations MCL::filterScan(const Eigen::Vector3f xEst, const std::vector<float
 Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intensities)
 {
     float prev_dist, prev_yaw;
+    int counter = 0;
     std::vector<float> ranges, angles;
-
-    ROS_WARN("hello1");
+    std::vector<int> js;
+    for(int j = 0; j != map_.data.size(); ++j)
+    {
+        if (map_.data[j] < 0 || map_.data[j] > 25)
+        {
+            js.push_back(j);
+            int cellY = j % map_.info.width;
+            int cellX = j / map_.info.width;
+            float x = (cellX * map_.info.resolution) + map_.info.origin.position.x;
+            float y = (cellY * map_.info.resolution) + map_.info.origin.position.y;
+            //ROS_WARN("POSE X: %f, Y: %f", x, y);
+        }
+    }
+    ROS_WARN("hello3");
     for(int i = 0; i < num_intensities; ++i)
     {
-        ROS_WARN("hello2");
         float curr_yaw = xEst(2) + (min_angle_ + i * angle_increment_);
         float dist = min_range_;
-
+        ROS_WARN("current angle: %f", curr_yaw);
         //ray tracing for each angle
         while (dist != max_range_)
         {
-            ROS_WARN("hello3");
+            //ROS_WARN("hello5");
             float x = xEst(0) + dist * cosf(curr_yaw);
             float y = xEst(1) + dist * sinf(curr_yaw);
 
             if (x > max_range_ || x < 0 || y > max_range_ || y < -max_range_)
                 break;
             
-            ROS_WARN("hello4");
+            if (sqrtf(powf(x, 2) + powf(y, 2)) >= max_range_)
+                break;
             
             //get cell number from pose
-            //int cell_x = (x / map_.info.resolution) + (map_.info.width / 2);
-            //int cell_y = (y / map_.info.resolution) + (map_.info.height / 2);
+            int cell_x = (x / map_.info.resolution) + (map_.info.width / 2);
+            int cell_y = (y / map_.info.resolution) + (map_.info.height / 2);
 
-            std::cout << "x " << x << " y " << y << std::endl;
-            std::cout << "res " << map_.info.resolution << std::endl;
-            std::cout << "origin " << map_.info.origin.position.x << "," << map_.info.origin.position.y << std::endl;
-
-            int cell_x = (x - map_.info.origin.position.x) / map_.info.resolution;
-            int cell_y = (x - map_.info.origin.position.y) / map_.info.resolution;
-
-            ROS_WARN("hello5");
+            //ROS_INFO("POSE X: %f, Y: %f", x, y);
+            //ROS_INFO("CELL X: %d, Y: %d", cell_x, cell_y);
 
             //get occupancy grid map array index 
-            std::cout << "cell x " << cell_x << std::endl;
-            std::cout << "cell y " << cell_y << std::endl;
             int idx = map_.info.width * cell_x + cell_y;
-            std::cout << "map index " << idx << std::endl;
-            std::cout << "map array size " << map_.data.size() << std::endl;
+
+            std::vector<int>::iterator it;
+            it = std::find(js.begin(), js.end(), idx);
+            if (it != js.end())
+                std::cout << "Element found" << std::endl;
 
             //check if cell is not free
             if (map_.data[idx] < 0 || map_.data[idx] > 25)
@@ -253,13 +261,13 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
                 }
                 ROS_WARN("hello9");
                 visualization_msgs::Marker marker;
-                marker.header.frame_id = "base_footprint";
+                marker.header.frame_id = "track";
                 marker.header.stamp = ros::Time::now();
-                marker.id = ranges.size() - 1;
+                marker.id = counter;
                 marker.type = visualization_msgs::Marker::CUBE;
                 marker.action = visualization_msgs::Marker::ADD;
-                marker.pose.position.x = final_dist*cosf(final_yaw);
-                marker.pose.position.y = final_dist*sinf(final_yaw);
+                marker.pose.position.x = x;
+                marker.pose.position.y = y;
                 marker.pose.position.z = 0;
                 marker.scale.x = 0.07;
                 marker.scale.y = 0.07;
@@ -269,6 +277,8 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
                 marker.color.b = 0.0f;
                 marker.color.a = 1.0;
                 predicted_scan_.markers.push_back(marker);
+                ++counter;
+
                 ROS_WARN("hello10");
                 ranges.push_back(final_dist);
                 angles.push_back(final_yaw);

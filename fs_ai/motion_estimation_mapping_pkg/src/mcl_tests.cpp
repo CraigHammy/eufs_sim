@@ -16,9 +16,7 @@ public:
         ROS_WARN("constructor");
         start = false;
         start2 = false;
-        boost::shared_ptr<nav_msgs::OccupancyGrid> map_ptr(new nav_msgs::OccupancyGrid(map));
-        MCL mcl(private_nh_, map_ptr);
-        mcl2 = mcl;
+        count = 0;
         scansub = private_nh_->subscribe<sensor_msgs::LaserScan>("/laserscan", 1, boost::bind(&Testing::scanCallback, this, _1));
         odomsub = private_nh_->subscribe<nav_msgs::Odometry>("/ground_truth/odom", 1, boost::bind(&Testing::odomCallback, this, _1));
         mapsub = private_nh_->subscribe<nav_msgs::OccupancyGrid>("/map", 1, boost::bind(&Testing::mapCallback, this, _1));
@@ -42,24 +40,32 @@ private:
     bool start;
     bool start2;
     nav_msgs::OccupancyGrid map;
+    int count;
 };
 
 
 void Testing::mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
 {
     ROS_WARN("map callback");
-    map = *msg;
-    if (start and start2)
-        mcl2.amcl_estimation_step(xEst, scan);
+    start2 = true;
+    if (count == 0) 
+    {
+        map = *msg;
+        ++count;
+    }
 }
 
 void Testing::scanCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
     ROS_WARN("scan callback");
-    start2 = true;
     scan = msg->ranges;
-    //if (start == true)
-    //    mcl2.amcl_estimation_step(xEst, scan);
+
+    if (start && start2)
+    {
+        boost::shared_ptr<nav_msgs::OccupancyGrid> map_ptr(new nav_msgs::OccupancyGrid(map));
+        MCL mcl(private_nh_, map_ptr);
+        mcl.amcl_estimation_step(xEst, scan);
+    }
 }
 
 void Testing::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
