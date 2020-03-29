@@ -33,8 +33,8 @@ void MCL::initialise()
 float MCL::amcl_estimation_step(const Eigen::Vector3f& xEst, const std::vector<float>& scan)
 {
     //do it for every particle 
-    //std::vector<float> z(filterScan(xEst, scan).ranges);
-    //filtered_scan_pub_.publish(filtered_scan_);
+    std::vector<float> z(filterScan(xEst, scan).ranges);
+    filtered_scan_pub_.publish(filtered_scan_);
     
     std::vector<float> z_pred(predictObservation(xEst, scan.size()).ranges);
     predicted_scan_pub_.publish(predicted_scan_);

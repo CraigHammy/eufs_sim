@@ -17,14 +17,16 @@ public:
     /**
      * @brief Constructor for the global frame broadcaster class
      */
-    WorldFrameBroadcaster(ros::NodeHandle* nh): nh_(*nh) { initialise(); }
+    WorldFrameBroadcaster(ros::NodeHandle* nh): nh_(*nh), private_nh_("~") { initialise(); }
 
     /**
      * @brief Initialises the subscriber to the topic that publishes the current SLAM estimate of the robot inside the map  
      */
     void initialise()
     {
-        slam_sub_ = nh_.subscribe<nav_msgs::Odometry>("/ground_truth/odom", 1, boost::bind(&WorldFrameBroadcaster::slam_callback, this, _1));
+        private_nh_.getParam("pose_topic", name);
+        std::cout << name << std::endl;
+        slam_sub_ = nh_.subscribe<nav_msgs::Odometry>(name, 1, boost::bind(&WorldFrameBroadcaster::slam_callback, this, _1));
     }
 
     /**
@@ -45,15 +47,17 @@ public:
         transformStamped_.transform.rotation = orient;
 
         tfb_.sendTransform(transformStamped_);
-        //ROS_INFO("x: %f, y: %f, yaw:%f", msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.orientation.z);
+        ROS_INFO("x: %f, y: %f, yaw:%f", msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.orientation.z);
     }
 
 private:
     //ROS helper variables 
     ros::NodeHandle nh_;
+    ros::NodeHandle private_nh_;
     ros::Subscriber slam_sub_;
     tf2_ros::TransformBroadcaster tfb_;
     geometry_msgs::TransformStamped transformStamped_;
+    std::string name;
 };
 
 int main(int argc, char** argv)

@@ -50,7 +50,7 @@ struct DataAssociation
     std::string colour;
 };
 
-static const double NEW_LANDMARK_THRESH = 0.1;
+static const double NEW_LANDMARK_THRESH = 0.3;
 
 /**
  * @brief Computes landmark EKF predicted observation, Jacobians wrt to landmark and robot locations and landmark innovation covariance

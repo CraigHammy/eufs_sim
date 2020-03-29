@@ -116,8 +116,8 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, const Eigen::Mat
         //ROS_WARN("zero");
         return;
     }
-    //std::cout << "innovation mean\n" << best_innov_mean << std::endl;
-    if ((best_p < NEW_LANDMARK_THRESH) && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.0))
+    //std::cout << "innovation mean\n" << best_innov_mean << std::endl; && ((map_feature - landmarks_.at(best_arg).mu_).norm() > 1.0)
+    if ((best_p < NEW_LANDMARK_THRESH))
     {
         DataAssociation d;
         d.measurement = measurement;
@@ -291,11 +291,10 @@ void Particle::proposalSampling(const std::vector<DataAssociation> known_feature
     //get random sample from multivariate Gaussian/normal distribution
     Eigen::Vector3f uniform_randoms(distribution(rng), distribution(rng), distribution(rng));
     //std::cout << "uniform numbers\n" << uniform_randoms << std::endl;
-    ROS_ERROR("try removing the *0.1 operation with the sampled pose and if bad slam estimate only use particle with highest weight");
     Eigen::Vector3f x_sample(cholesky_L * uniform_randoms * 0.1 + mu_);
     x_sample(2) = angleWrap(x_sample(2));
 
-    mu_ = x_sample;
+    //mu_ = x_sample;
 }
 
 /**

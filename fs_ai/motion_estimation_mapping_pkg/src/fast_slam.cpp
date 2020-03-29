@@ -302,12 +302,12 @@ void StateEstimation::groundTruthConeCallback(const visualization_msgs::MarkerAr
     array = *msg;
 
     //if using a rosbag change the time of the Header, else remove this loop
-    std::vector<visualization_msgs::Marker>::iterator iter;
+    /*std::vector<visualization_msgs::Marker>::iterator iter;
     for (iter = array.markers.begin(); iter != array.markers.end(); ++iter)
         iter->header.stamp = ros::Time::now();
 
     //publish the MarkerArray
-    cone_array_pub_.publish(array);
+    cone_array_pub_.publish(array);*/
 }
 
 /**
@@ -327,7 +327,7 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
     
    
     //publish the cone detections as markers
-    /*visualization_msgs::Marker marker;
+    visualization_msgs::Marker marker;
     marker.header.frame_id = "/velodyne";
     marker.header.stamp = ros::Time::now();
     marker.id = cone_counter_;
@@ -345,7 +345,7 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
     marker.color.a = 1.0;
     cone_array_.markers.push_back(marker);
     cone_array_pub_.publish(cone_array_);
-    ++cone_counter_;*/
+    ++cone_counter_;
 }
 
 /**
@@ -683,6 +683,8 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
 
     distances.clear();
 
+    landmark_cloud_.points.clear();
+
     xEst_ = Eigen::Vector3f::Zero();
     float weight = 1 / num_particles_;
     for (p = particles_.begin(); p != particles_.end(); ++p, ++j)
@@ -692,7 +694,24 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
         xEst_(2) = angleWrap(xEst_(2) + weight * p->mu_(2));
 
         //append euclidean distance to starting point
-        distances.push_back((p->mu_ - Eigen::Vector3f::Zero()).norm());     
+        distances.push_back((p->mu_ - Eigen::Vector3f::Zero()).norm());   
+
+        std::vector<Landmark>::const_iterator landmark;
+        for(landmark = p->landmarks_.begin(); landmark != p->landmarks_.end(); ++landmark)
+        {
+            //add new landmark to landmark cloud for visualization
+            geometry_msgs::Point32 point;
+            point.x = landmark->mu_(0);
+            point.y = landmark->mu_(1);
+            point.z = 0.0;
+            landmark_cloud_.points.push_back(point);
+            landmark_cloud_.header.stamp = ros::Time::now();
+            landmark_cloud_.header.frame_id = "track";
+        }
+        //publish landmark PointCloud2 message
+        sensor_msgs::PointCloud2 cloud;
+        sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
+        landmark_cloud_pub_.publish(cloud);  
     }
 
      //check for loop closure 

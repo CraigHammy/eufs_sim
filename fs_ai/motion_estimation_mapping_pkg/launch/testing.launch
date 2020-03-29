@@ -1,7 +1,9 @@
 <launch>
     <node type="rviz" name="rviz" pkg="rviz" args="-d ../.rviz/default.rviz"/>
 
-    <include file="$(find motion_estimation_mapping_pkg)/launch/track_frame_launcher.launch"/>
+   <node pkg="motion_estimation_mapping_pkg" type="global_frame_broadcaster" name="track_frame_broadcaster_node" output="screen">
+        <param name="pose_topic" value="/ground_truth/odom" type="str"/>
+    </node>
     
     <!--include file="$(find geodetic_to_enu_conversion_pkg)/launch/conversion_launcher.launch"/-->
 
