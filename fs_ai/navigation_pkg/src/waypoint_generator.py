@@ -4,7 +4,7 @@ import math
 from perception_pkg.msg import Cone
 from geometry_msgs.msg import PoseStamped
 
-cone_messages = []
+#cone_messages = []
 
 def generate_waypoints():
     pub = rospy.Publisher('waypoints', PoseStamped, queue_size=10)      # Publish to waypoints topic
@@ -43,8 +43,10 @@ def calculate_midpoint():                                               # Method
             if distance < least:
                 least = distance
                 closest_yellow = c  # Now have closest yellow cone
-    
-    least = 0
+                print("------CLOSEST YEL-----")
+                print(closest_yellow)
+                print("------CLOSEST YEL-----")
+        least = 0
     for c in cone_messages:                                             # Find closest blue cone to the yellow cone
         if c.colour == "blue":
             distance = math.sqrt( math.pow(closest_yellow.location.x - c.location.x, 2) + \
@@ -52,6 +54,9 @@ def calculate_midpoint():                                               # Method
             if distance < least:
                 min = distance
                 closest_blue = c    # Now have closest blue cone
+                print("------CLOSEST BLU-----")
+                print(closest_blue)
+                print("------CLOSEST BLU-----")
     
     # Take avg of points and create PoseStamped
     midpoint.header.frame_id = "track"
@@ -68,7 +73,7 @@ def calculate_midpoint():                                               # Method
    
 
 def main():
-    global cone_messages                                                # Use the global list of Cones
+    
     sub = rospy.Subscriber("/cones", Cone, cone_callback);              # Create a subscriber
 
     generate_waypoints()
@@ -77,6 +82,8 @@ def main():
     
 if __name__ == '__main__':
     try:
+        global cone_messages                                                # Use the global list of Cones
+        cone_messages = []
         main()
     except rospy.ROSInterruptException:
         pass

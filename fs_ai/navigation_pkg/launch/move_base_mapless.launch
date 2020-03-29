@@ -1,10 +1,10 @@
 <launch>
 
 <!-- Put relevant frame and topic names here: -->
-  <arg name="odom_frame_id"   default="odom"/>
+  <arg name="odom_frame_id"   default="track"/>
   <arg name="base_frame_id"   default="base_footprint"/>
-  <arg name="global_frame_id" default="odom"/>  <!-- use /odom instead of /map for mapless navigation --> 
-  <arg name="odom_topic"      default="odom" /> 
+  <arg name="global_frame_id" default="track"/>  <!-- use /track instead of /map for mapless navigation --> 
+  <arg name="odom_topic"      default="track" /> 
   <arg name="laser_topic"     default="/laserscan" />
 
 <!-- *DO NOT* run the map server, init move_base node --> 

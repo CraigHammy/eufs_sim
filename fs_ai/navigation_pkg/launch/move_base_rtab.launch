@@ -1,9 +1,9 @@
 <launch>
 
-  <arg name="odom_frame_id"   default="odom"/>
+  <arg name="odom_frame_id"   default="track"/>
   <arg name="base_frame_id"   default="base_footprint"/>
-  <arg name="global_frame_id" default="map"/>
-  <arg name="odom_topic"      default="robot_control/odom" />
+  <arg name="global_frame_id" default="track"/>
+  <arg name="odom_topic"      default="track" />
   <arg name="laser_topic"     default="/laserscan" />
 
 <!-- Run the map server --> 
