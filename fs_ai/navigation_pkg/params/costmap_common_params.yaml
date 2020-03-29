@@ -31,7 +31,7 @@ obstacle_layer:
     #clearing: false
     #min_obstacle_height: 0.0
     #max_obstacle_height: 0.15
-  # for debugging only, let's you see the entire voxel grid
+  # for debugging only, lets you see the entire voxel grid
 
 #cost_scaling_factor and inflation_radius were now moved to the inflation_layer ns
 inflation_layer:
@@ -40,4 +40,4 @@ inflation_layer:
   inflation_radius:     1.0  # max. distance from an obstacle at which costs are incurred for planning paths.
 
 static_layer:
-  enabled:              true
+  enabled:              false

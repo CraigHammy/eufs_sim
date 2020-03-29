@@ -7,9 +7,6 @@ from geometry_msgs.msg import PoseStamped
 #cone_messages = []
 
 def generate_waypoints():
-    pub = rospy.Publisher('waypoints', PoseStamped, queue_size=10)      # Publish to waypoints topic
-    rospy.init_node('waypoints', anonymous=True)                        # Start the waypoints node
-
     rate = rospy.Rate(10)                                               # Rate is 10hz
 
     while not rospy.is_shutdown():                                      # Until shutdown / to implement: until final goal is reached (full lap done)
@@ -23,26 +20,26 @@ def generate_waypoints():
 
 
 def cone_callback(cone):                                                # Callback to append cones to list
-    global cone_messages
     cone_messages.append(cone)
+    #print(cone_messages)
 
 
 # TODO: Not the fastest implementation! Can use math.hypot or convert to C code to make it faster
 # TODO: Add visited cone info
 # Can also implement sanity checks like max distance we expect a cone's 'brother' to be
-def calculate_midpoint():                                               # Method to calculate the midpoint between a cone and (hopefully) it's brother on the other side
-    global cone_messages
+def calculate_midpoint():                                               # Method to calculate the midpoint between a cone and (hopefully) it's brother on the other side  
     least = 0                                                           # Temp var to use for finding closest cone
     closest_yellow = None                                               # TODO: Handle None type here later...
     closest_blue = None
     midpoint = PoseStamped()
 
     for c in cone_messages:                                             # Find closest yellow cone to car, Euclidian distance
+        print(c)
         if c.colour == "yellow":
             distance = math.sqrt( math.pow(c.location.x, 2) + math.pow(c.location.y, 2) )
             if distance < least:
                 least = distance
-                closest_yellow = c  # Now have closest yellow cone
+                closest_yellow = c              # Now have closest yellow cone
                 print("------CLOSEST YEL-----")
                 print(closest_yellow)
                 print("------CLOSEST YEL-----")
@@ -71,19 +68,17 @@ def calculate_midpoint():                                               # Method
 
     return midpoint # Return the middle point
    
-
-def main():
-    
-    sub = rospy.Subscriber("/cones", Cone, cone_callback);              # Create a subscriber
-
-    generate_waypoints()
-
-    rospy.spin()
     
 if __name__ == '__main__':
     try:
-        global cone_messages                                                # Use the global list of Cones
+        global cone_messages                                                    # Use the global list of Cones
         cone_messages = []
-        main()
+        rospy.init_node('waypoints', anonymous=True)                            # Start the waypoints node
+
+        sub = rospy.Subscriber("/cones", Cone, cone_callback);                  # Create a subscriber
+        pub = rospy.Publisher('/waypoints', PoseStamped, queue_size=10)         # Publish to waypoints topic
+
+        rospy.spin()
+
     except rospy.ROSInterruptException:
         pass
