@@ -76,7 +76,7 @@ private:
     Observations filterScan(const Eigen::Vector3f xEst, const std::vector<float>& scan);
 
     /**
-     * @brief Uses a transform listener to return the transformation matrix from the base_footprint to the velodyne frame
+     * @brief Uses a transform listener to return the transformation matrix from the base to the velodyne frames
      * @return Eigen 3D transformation matrix 
      */
     Eigen::Matrix3f getBaseToVelodyneTF();
@@ -88,6 +88,14 @@ private:
      * @return Predicted ranges and angles vector 
      */
     Observations predictObservation(const Eigen::Vector3f& xEst, int num_intensities);
+
+    /**
+     * @brief Subsamples the ranges array of the laser scan message 
+     * @param scan Ranges array of the LaserScan message
+     * @param step Values to skip in the scan array for every value added
+     * @return Subsampled array 
+     */
+    std::vector<float> subsampleRanges(const std::vector<float>& scan, float step);
 };
 
 #endif
