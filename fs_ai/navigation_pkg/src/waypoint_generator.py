@@ -75,11 +75,12 @@ class WaypointGenerator:
     
 if __name__ == '__main__':
     try:
-        w = WaypointGenerator()
+        cone_messages = []
+        w = WaypointGenerator(cone_messages)
 
         rospy.init_node('waypoints', anonymous=True)                            # Start the waypoints node
 
-        sub = rospy.Subscriber("/cones", Cone, cone_callback);                  # Create a subscriber
+        sub = rospy.Subscriber("/cones", Cone, w.cone_callback);                # Create a subscriber
         pub = rospy.Publisher('/waypoints', PoseStamped, queue_size=10)         # Publish to waypoints topic
 
         rospy.spin()

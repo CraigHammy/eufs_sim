@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
   //Find cone midpoint (python script) and put it as a goal in a ROS spin loop 
 
   //Send a goal to the robot to move 1 meter forward <- next step is to move between cones / gitlab version has ground truth to check them
-  goal.target_pose.header.frame_id = "base_link";
+  goal.target_pose.header.frame_id = "base_footprint";
   goal.target_pose.header.stamp = ros::Time::now();
 
   goal.target_pose.pose.position.x = 1.0;
