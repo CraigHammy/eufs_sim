@@ -44,6 +44,9 @@ float MCL::amcl_estimation_step(const Eigen::Vector3f& xEst, const std::vector<f
 
     std::vector<float> z_pred(predictObservation(xEst, scan.size()).ranges);
     predicted_scan_pub_.publish(predicted_scan_);
+
+    filtered_scan_.markers.clear();
+    predicted_scan_.markers.clear();
 /*
     //calculate the difference 
     Eigen::VectorXf differences;
@@ -217,7 +220,7 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
     int counter = 0;
     std::vector<float> ranges, angles;
 
-    /*
+    
     std::vector<int> js;
     for(int j = 0; j != map_.data.size(); ++j)
     {
@@ -230,31 +233,42 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
             float y = (cellY * map_.info.resolution) + map_.info.origin.position.y;
             //ROS_WARN("POSE X: %f, Y: %f", x, y);
         }
-    }*/
+    }
 
     Eigen::Matrix3f t(getBaseToVelodyneTF());
-    float test_dist = sqrtf(powf(xEst(0), 2) + powf(xEst(1), 2)) + sqrtf(powf(t(0, 2), 2) + powf(t(1, 2), 2));
+    //float base_to_vel_dist = sqrtf(powf(t(0, 2), 2) + powf(t(1, 2), 2));
     
     std::vector<float> same_cone;
 
     for(int i = 0; i < num_intensities; ++i)
     {
         float curr_yaw = xEst(2) + (min_angle_ + i * angle_increment_);
-        float dist = test_dist;
+        ROS_INFO("starting distance: %f", min_range_);
+        ROS_INFO("current location x: %f, y: %f", xEst(0), xEst(1));
+        float dist = min_range_;
+        float max = max_range_;
         
         //ray tracing for each angle
-        while (dist != max_range_)
+        while (dist <= max)
         {
             //ROS_WARN("hello5");
-            float x = xEst(0) + dist * cosf(curr_yaw);
-            float y = xEst(1) + dist * sinf(curr_yaw);
+            float dx = dist * cosf(curr_yaw);
+            float dy = dist * sinf(curr_yaw);
+            float x = xEst(0) + dx;
+            float y = xEst(1) + dy;
+            
+            if (dx > max_range_ || dx < 0 || dy > max_range_ || dy < -max_range_)
+            {
+                ROS_WARN("dx: %f, dy: %f, max_range: %f", dx, dy, max_range_);
+                break;
+            }
 
-            if (x > max_range_ || x < 0 || y > max_range_ || y < -max_range_)
+            if (sqrtf(powf(dx, 2) + powf(dy, 2)) >= max_range_)
+            {
+                ROS_WARN("Euclidean dist: %f, max_range: %f", sqrtf(powf(dx, 2) + powf(dy, 2)), max_range_);
                 break;
-            
-            if (sqrtf(powf(x, 2) + powf(y, 2)) >= max_range_)
-                break;
-            
+            }
+
             //get cell number from pose
             int cell_x = (x / map_.info.resolution) + (map_.info.width / 2);
             int cell_y = (y / map_.info.resolution) + (map_.info.height / 2);
@@ -264,16 +278,24 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
 
             //get occupancy grid map array index 
             int idx = map_.info.width * cell_x + cell_y;
-            /*
+            
             std::vector<int>::iterator it;
+            int count =0;
             it = std::find(js.begin(), js.end(), idx);
             if (it != js.end())
-                std::cout << "Element found" << std::endl;*/
+            {
+                std::cout << "Element found" << std::endl;
+                ++count;
+            }
+            if (count>0)
+                ROS_WARN("number of cones found: %d", count);
+
             
             //check if cell is not free
             if (map_.data[idx] < 0 || map_.data[idx] > 25)
             {
                 float final_dist, final_yaw;
+                /*
                 //check if the previous is the neighbouring cell
                 if (same_cone.size() == 0)
                 {
@@ -283,7 +305,7 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
                     dist += map_.info.resolution;
                     continue;
                 }
-                else if ((same_cone.size() > 0) && (fabs(dist - prev_dist) < 0.4))
+                else if ((same_cone.size() > 0) && (fabs(dist - prev_dist) < 0.6))
                 {
                     same_cone.push_back(dist);
                     prev_yaw = curr_yaw;
@@ -307,7 +329,7 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
                     }
                 }
 
-                same_cone.clear();
+                same_cone.clear();*/
 
                 visualization_msgs::Marker marker;
                 marker.header.frame_id = "track";

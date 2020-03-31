@@ -14,7 +14,7 @@
 
     <node pkg="motion_estimation_mapping_pkg" type="mcl_tests" name="testing_node" output="screen">
         <param name="scan_min_range"        value="0.10000000149"       type="double"/>
-        <param name="scan_max_range"        value="8.0"                type="double"/>
+        <param name="scan_max_range"        value="7.5"                type="double"/>
         <param name="scan_min_angle"        value="-1.57079601288"      type="double"/>
         <param name="scan_max_angle"        value="1.57079601288"       type="double"/>
         <param name="scan_angle_increment"  value="0.00436111120507"    type="double"/>

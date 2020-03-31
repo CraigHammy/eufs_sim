@@ -47,7 +47,7 @@ public:
         transformStamped_.transform.rotation = orient;
 
         tfb_.sendTransform(transformStamped_);
-        ROS_INFO("x: %f, y: %f, yaw:%f", msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.orientation.z);
+        //ROS_INFO("x: %f, y: %f, yaw:%f", msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.orientation.z);
     }
 
 private:
