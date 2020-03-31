@@ -3,24 +3,26 @@ import math
 import rospy
 from geometry_msgs.msg import PoseStamped
 from perception_pkg.msg import Cone
+from visualization_msgs.msg import Marker
 
 class WaypointGenerator:
 
     def __init__(self):
         self.cone_messages = []
-        self.sub = rospy.Subscriber("/cones", Cone, self.cone_callback);                # Create a subscriber
-        self.pub = rospy.Publisher('/waypoints', PoseStamped, queue_size=10)         # Publish to waypoints topic
+        self.sub = rospy.Subscriber("/cones", Cone, self.cone_callback);            # Create a subscriber
+        self.pub = rospy.Publisher('/waypoints', PoseStamped, queue_size=1)         # Publish to waypoints topic
+        self.markerPub = rospy.Publisher('/waypoints_markers', Marker)
 
     def generate_waypoints(self):
         rate = rospy.Rate(5)                                                        # Rate is 5hz
 
         while not rospy.is_shutdown():                                              # Until shutdown / to implement: until final goal is reached (full lap done)
-            msg = self.calculate_midpoint()                                              # TODO: The point between the two cones
+            msg = self.calculate_midpoint()                                         # TODO: The point between the two cones
             #rospy.loginfo(msg)
             rate.sleep()
 
 
-    def cone_callback(self, cone):                                                # Callback to append cones to list
+    def cone_callback(self, cone):                                                  # Callback to append cones to list
         self.cone_messages.append(cone)
         #print(cone_messages)
 
@@ -72,9 +74,28 @@ class WaypointGenerator:
             midpoint.pose.orientation.y = 0.0
             midpoint.pose.orientation.z = 0.0
             midpoint.pose.orientation.w = 1.0
+
+            # Create a marker to visualize the midpoint in RViz
+            marker = Marker()
+            marker.header.frame_id = "/track"
+            marker.type = marker.ARROW
+            marker.action = marker.ADD
+            marker.scale.x = 0.2
+            marker.scale.y = 0.2
+            marker.scale.z = 0.2
+            marker.color.a = 1.0
+            marker.color.r = 1.0
+            marker.color.g = 1.0
+            marker.color.b = 0.0
+            marker.pose.orientation.w = 1.0
+            marker.pose.position.x = midpoint.pose.position.x
+            marker.pose.position.y = midpoint.pose.position.y
+            marker.pose.position.z = 0.0
+
             connections = self.pub.get_num_connections()
             if connections > 0:
                 self.pub.publish(midpoint)
+                self.markerPub.publish(marker)
    
     
 if __name__ == '__main__':

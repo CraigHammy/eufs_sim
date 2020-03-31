@@ -33,8 +33,8 @@
     
   </node>
 
-  <!--Launch cpp file mapping lap -->
-  <node pkg="navigation_pkg" type="mapping_lap" name="eddie_node" output="screen" />
+  <!--Launch cpp file mapping lap 
+  <node pkg="navigation_pkg" type="mapping_lap" name="eddie_node" output="screen" />-->
 
   <!--Launch py file twist_to_ackermann -->
   <node pkg="navigation_pkg" type="cmd_vel_to_ackermann_drive.py" name="cmd_vel_to_ackermann_drive" output="screen" />
