@@ -39,7 +39,7 @@
   <!--Launch py file twist_to_ackermann -->
   <node pkg="navigation_pkg" type="cmd_vel_to_ackermann_drive.py" name="cmd_vel_to_ackermann_drive" output="screen" />
   
-  <!--Launch py file waypoints_generation -->
-  <node pkg="navigation_pkg" type="waypoint_generator.py" name="waypoints_generator" output="screen" />
+  <!--Launch py file waypoints_generation 
+  <node pkg="navigation_pkg" type="waypoint_generator.py" name="waypoints_generator" output="screen" />-->
 
 </launch>

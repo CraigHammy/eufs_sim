@@ -1,5 +1,6 @@
 <launch>
     <!-- <include file="$(find eufs_gazebo)/launch/small_track.launch"/>                    Select track here - NOT WORKING, SIM MUST BE IN SEPARATE TERMINAL -->
     <include file="$(find perception_pkg)/launch/lidar.launch"/>                            <!-- Launch perception package-->
-    <include file="$(find motion_estimation_mapping_pkg)/launch/slam_launch.launch"/>       <!-- Launch mapping package -->
+    <include file="$(find navigation_pkg)/launch/track_frame_launcher.launch"/>             <!-- Launch mapping package (copied because Valerio can change later) -->
+    <node type="rviz" name="rviz" pkg="rviz" args="-d ../.rviz/default.rviz"/>
 </launch>

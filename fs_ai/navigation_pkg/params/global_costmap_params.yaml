@@ -5,8 +5,10 @@ global_costmap:
    update_frequency: 1.0
    publish_frequency: 0.2
    static_map: false
-   width: 10.0
-   height: 10.0
+   rolling_window: true
+   width: 30.0
+   height: 30.0
+   resolution: 0.2
    transform_tolerance: 2.0
    plugins:
      - {name: obstacle_layer,          type: "costmap_2d::VoxelLayer"}
