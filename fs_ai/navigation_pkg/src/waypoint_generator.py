@@ -5,21 +5,18 @@ from geometry_msgs.msg import PoseStamped
 from perception_pkg.msg import Cone
 
 class WaypointGenerator:
-    cone_messages = []
 
-    def __init__(self, cones):
-        cones = cone_messages
+    def __init__(self):
+        self.cone_messages = []
+        self.sub = rospy.Subscriber("/cones", Cone, self.cone_callback);                # Create a subscriber
+        self.pub = rospy.Publisher('/waypoints', PoseStamped, queue_size=10)         # Publish to waypoints topic
 
     def generate_waypoints(self):
-        rate = rospy.Rate(10)                                               # Rate is 10hz
+        rate = rospy.Rate(5)                                                        # Rate is 5hz
 
-        while not rospy.is_shutdown():                                      # Until shutdown / to implement: until final goal is reached (full lap done)
-            msg = calculate_midpoint(self)                                      # TODO: The point between the two cones
+        while not rospy.is_shutdown():                                              # Until shutdown / to implement: until final goal is reached (full lap done)
+            msg = self.calculate_midpoint()                                              # TODO: The point between the two cones
             #rospy.loginfo(msg)
-            connections = pub.get_num_connections()                         # Wait until connection to publish a message
-            if connections > 0:
-                pub.publish(msg)
-                break
             rate.sleep()
 
 
@@ -32,58 +29,59 @@ class WaypointGenerator:
     # TODO: Add visited cone info
     # Can also implement sanity checks like max distance we expect a cone's 'brother' to be
     def calculate_midpoint(self):                                               # Method to calculate the midpoint between a cone and (hopefully) it's brother on the other side  
-        least = 0                                                           # Temp var to use for finding closest cone
-        closest_yellow = None                                               # TODO: Handle None type here later...
-        closest_blue = None
+        least = 999999                                                          # Temp var to use for finding closest cone
+        closest_yel = Cone()                                                    # TODO: Handle None type here later...
+        closest_blu = Cone()
+        yel_created = False
+        blu_created = False
         midpoint = PoseStamped()
 
-        for c in cone_messages:                                             # Find closest yellow cone to car, Euclidian distance
-            print(c)
+        for c in self.cone_messages:                                             # Find closest yellow cone to car, Euclidian distance
+            #print(c)
             if c.colour == "yellow":
                 distance = math.sqrt( math.pow(c.location.x, 2) + math.pow(c.location.y, 2) )
                 if distance < least:
                     least = distance
-                    closest_yellow = c              # Now have closest yellow cone
-                    print("------CLOSEST YEL-----")
-                    print(closest_yellow)
-                    print("------CLOSEST YEL-----")
-            least = 0
-        for c in cone_messages:                                             # Find closest blue cone to the yellow cone
+                    closest_yel = c                 # Now have closest yellow cone
+                    yel_created = True
+                    #print("------CLOSEST YEL-----")
+                    #print(closest_yel)
+                    #print("------CLOSEST YEL-----")
+            least = 99999
+
+        for c in self.cone_messages:                                             # Find closest blue cone to the yellow cone
             if c.colour == "blue":
-                distance = math.sqrt( math.pow(closest_yellow.location.x - c.location.x, 2) + \
-                    math.pow(closest_yellow.location.y - c.location.y, 2) ) # Closest blue cone to yel cone is sqrt( (Xy-Xb)^2 + (Yy-Yb)^2 )
+                distance = math.sqrt( math.pow(closest_yel.location.x - c.location.x, 2) + \
+                    math.pow(closest_yel.location.y - c.location.y, 2) ) # Closest blue cone to yel cone is sqrt( (Xy-Xb)^2 + (Yy-Yb)^2 )
                 if distance < least:
                     min = distance
-                    closest_blue = c    # Now have closest blue cone
-                    print("------CLOSEST BLU-----")
-                    print(closest_blue)
-                    print("------CLOSEST BLU-----")
+                    closest_blu = c                 # Now have closest blue cone
+                    blu_created = True
+                    #print("------CLOSEST BLU-----")
+                    #print(closest_blu)
+                    #print("------CLOSEST BLU-----")
         
-        # Take avg of points and create PoseStamped
-        midpoint.header.frame_id = "track"
-        midpoint.header.stamp = rospy.Time.now()
-        midpoint.pose.position.x = (closest_blue.location.x + closest_yellow.location.x) /2
-        midpoint.pose.position.y = (closest_blue.location.x + closest_yellow.location.y) /2
-        midpoint.pose.position.z = 0.0
-        midpoint.pose.orientation.x = 0.0
-        midpoint.pose.orientation.y = 0.0
-        midpoint.pose.orientation.z = 0.0
-        midpoint.pose.orientation.w = 1.0
-
-        return midpoint # Return the middle point
+        if yel_created is True and blu_created is True:      # Do nothing if they cones arent established / Take avg of points and create PoseStamped / check if its just a default cone and do nothing if it is
+            
+            midpoint.header.frame_id = "track"
+            midpoint.header.stamp = rospy.Time.now()
+            midpoint.pose.position.x = (closest_blu.location.x + closest_yel.location.x) /2
+            midpoint.pose.position.y = (closest_blu.location.x + closest_yel.location.y) /2
+            midpoint.pose.position.z = 0.0
+            midpoint.pose.orientation.x = 0.0
+            midpoint.pose.orientation.y = 0.0
+            midpoint.pose.orientation.z = 0.0
+            midpoint.pose.orientation.w = 1.0
+            connections = self.pub.get_num_connections()
+            if connections > 0:
+                self.pub.publish(midpoint)
    
     
 if __name__ == '__main__':
-    try:
-        cone_messages = []
-        w = WaypointGenerator(cone_messages)
+    rospy.init_node('waypoints', anonymous=True)            # Start the waypoints node
+    w = WaypointGenerator()                                 # Init object (creates publisher, subscriber and list of cones)
 
-        rospy.init_node('waypoints', anonymous=True)                            # Start the waypoints node
+    while not rospy.is_shutdown():                          # Start generating waypoints between cones
+        w.generate_waypoints();
 
-        sub = rospy.Subscriber("/cones", Cone, w.cone_callback);                # Create a subscriber
-        pub = rospy.Publisher('/waypoints', PoseStamped, queue_size=10)         # Publish to waypoints topic
-
-        rospy.spin()
-
-    except rospy.ROSInterruptException:
-        pass
+    rospy.spin()
