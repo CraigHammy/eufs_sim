@@ -34,16 +34,28 @@ float MCL::amcl_estimation_step(const Eigen::Vector3f& xEst, const std::vector<f
 {
     //do it for every particle 
     std::vector<float> z(filterScan(xEst, scan).ranges);
-    filtered_scan_pub_.publish(filtered_scan_);
     
+    std::vector<float> z_pred(predictObservation(xEst, scan.size()).ranges);
+    filtered_scan_pub_.publish(filtered_scan_);
+    predicted_scan_pub_.publish(predicted_scan_);
+
     //CHECK THAT THERE IS SAME NUMBER OF DETECTIONS FOR MAP AND SENSOR
     //THE SENSOR ONES START FROM VELODYNE SO DO THE SAME FOR MAP ONE 
     //SINCE VELODYNE CANNOT SEE ANYTHING BETWEEN THE VELODYNE AND THE CAR BASE 
     //INCREASE THE LANDMARK THRESHOLD INSIDE THE SLAM UTILS HEADER FILE 
     //AND MAKE IT A LAUNCH PARAMETER SO IT IS MODIFIABLE AT RUN TIME
 
-    std::vector<float> z_pred(predictObservation(xEst, scan.size()).ranges);
-    predicted_scan_pub_.publish(predicted_scan_);
+    ROS_WARN("filtered range size is %d, predicted scan size is %d", int(z.size()), int(z_pred.size()));
+    if (z.size() == z_pred.size())
+    {
+        float sum = 0;
+        for (int i = 0; i != z.size(); ++i)
+        {
+            sum += fabs(z_pred[i] - z[i]);
+        }
+        float average = sum / z.size();
+        ROS_WARN("average difference is %f", average);
+    }
 
     filtered_scan_.markers.clear();
     predicted_scan_.markers.clear();
@@ -115,12 +127,11 @@ std::vector<float> subsampleRanges(const std::vector<float>& scan, float step)
  */
 Observations MCL::filterScan(const Eigen::Vector3f xEst, const std::vector<float>& scan)
 {
-    //get transform from base footprint to velodyne link, useful as scans are in the velodyne frame
-    Eigen::Matrix3f t1(getBaseToVelodyneTF());
-
     //iterate over laser scan intensity message
     std::vector<float> ranges, angles;
     std::vector<float> temp;
+
+    //ROS_WARN("filtering..");
 
     for(int i = 1; i != scan.size(); ++i)
     {
@@ -156,33 +167,18 @@ Observations MCL::filterScan(const Eigen::Vector3f xEst, const std::vector<float
         
         //add to filtered scan, the middle point from all the individual cone intensity scans
         float dist = temp[int(temp.size() / 2)];
-        ROS_WARN("filtered scan range:%f", dist);
+        //ROS_WARN("filtered scan range:%f", dist);
         float yaw = min_angle_ + (i - int(temp.size() / 2)) * angle_increment_;
 
        //location of cone in x and y coordinates
         float x = dist * cosf(yaw);
         float y = dist * sinf(yaw);
 
-        /*
-
-        //create transformation matrix from velodyne to cone 
-        Eigen::Matrix3f t2;
-        t2 << cosf(yaw), -sinf(yaw), x, sinf(yaw), cosf(yaw), y, 0, 0, 1;
-
-        //multiply with transform from base to velodyne to get values in correct frame (base footprint)
-        Eigen::Matrix3f t3(t1 * t2);
-        float final_x = t3(0, 2);
-        float final_y = t3(1, 2);
-        float final_yaw = atan2f(final_y, final_x);
-        final_yaw = angleWrap(final_yaw);
-
-        //euclidean distance and yaw from robot to cone
-        float final_dist = sqrtf(powf(final_x, 2) + powf(final_y, 2));
-        */
+       //ROS_WARN("adding marker");
 
         ranges.push_back(dist);
         angles.push_back(yaw);
-
+/*
         visualization_msgs::Marker marker;
         marker.header.frame_id = "velodyne";
         marker.header.stamp = ros::Time::now();
@@ -200,10 +196,11 @@ Observations MCL::filterScan(const Eigen::Vector3f xEst, const std::vector<float
         marker.color.b = 1.0f;
         marker.color.a = 1.0;
         filtered_scan_.markers.push_back(marker);
-
+*/
         //remove all elements for next iteration
         temp.clear();
     }
+    //ROS_WARN("number of filtered scan markers is %d", int(filtered_scan_.markers.size()));
     Observations obs;
     obs.ranges = ranges;
     obs.angles = angles;
@@ -220,6 +217,7 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
 {
     float prev_dist, prev_yaw;
     int counter = 0;
+    int counter2 =0;
     std::vector<float> ranges, angles;
 
     
@@ -247,7 +245,7 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
 
     //float base_to_vel_dist = sqrtf(powf(t(0, 2), 2) + powf(t(1, 2), 2));
     
-    std::vector<float> same_cone;
+    std::vector<float> same_cone, same_cone2;
 
     for(int i = 0; i < num_intensities; ++i)
     {
@@ -296,49 +294,71 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
                 //std::cout << "Element found" << std::endl;
                 ++count;
             }
-            if (count>0)
-                //ROS_WARN("number of cones found: %d", count);
-
             
             //check if cell is not free
             if (map_.data[idx] < 0 || map_.data[idx] > 25)
             {
+                visualization_msgs::Marker marker1;
+                marker1.header.frame_id = "velodyne";
+                marker1.header.stamp = ros::Time::now();
+                marker1.id = counter2;
+                marker1.type = visualization_msgs::Marker::CUBE;
+                marker1.action = visualization_msgs::Marker::ADD;
+                marker1.pose.position.x = dx;
+                marker1.pose.position.y = dy;
+                marker1.pose.position.z = 0;
+                marker1.scale.x = 0.07;
+                marker1.scale.y = 0.07;
+                marker1.scale.z = 0.07;
+                marker1.color.r = 0.0f;
+                marker1.color.g = 0.0f;
+                marker1.color.b = 1.0f;
+                marker1.color.a = 1.0;
+                filtered_scan_.markers.push_back(marker1);
+                ++counter2;
                 float final_dist, final_yaw;
                 
                 //check if the previous is the neighbouring cell
                 if (same_cone.size() == 0)
                 {
                     same_cone.push_back(dist);
+                    same_cone2.push_back(curr_yaw);
                     prev_yaw = curr_yaw;
                     prev_dist = dist;
-                    dist += map_.info.resolution;
-                    continue;
+                    break;
                 }
-                else if ((same_cone.size() > 0) && (fabs(dist - prev_dist) < 0.3))
+                else if ((same_cone.size() > 0) && (fabs(dist - prev_dist) < 0.6))
                 {
                     same_cone.push_back(dist);
+                    same_cone2.push_back(curr_yaw);
                     prev_yaw = curr_yaw;
                     prev_dist = dist;
-                    dist += map_.info.resolution;
-                    //final_dist = (dist + prev_dist) / 2.0;
-                    //final_yaw = (curr_yaw + prev_yaw) / 2.0;
-                    continue;
+                    break;
                 } 
                 else 
                 {
                     if (same_cone.size() == 1)
                     {
                         final_dist = same_cone.at(0);
-                        final_yaw = start_yaw + min_angle_ + (i-1) * angle_increment_;
+                        final_yaw = same_cone2.at(0);
+                        same_cone.clear();
+                        same_cone2.clear();
+                        same_cone.push_back(dist);
+                        same_cone2.push_back(curr_yaw);
                     }
                     else 
                     {
                         final_dist = same_cone[int(same_cone.size() / 2)];
-                        final_yaw = start_yaw + min_angle_ + (i - int(same_cone.size() / 2)) * angle_increment_;
+                        final_yaw = same_cone2[int(same_cone2.size() / 2)];
+                        same_cone.clear();
+                        same_cone2.clear();
+                        same_cone.push_back(dist);
+                        same_cone2.push_back(curr_yaw);
                     }
                 }
 
-                same_cone.clear();
+                float vis_x = final_dist * cosf(final_yaw);
+                float vis_y = final_dist * sinf(final_yaw);
 
                 visualization_msgs::Marker marker;
                 marker.header.frame_id = "velodyne";
@@ -346,8 +366,8 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
                 marker.id = counter;
                 marker.type = visualization_msgs::Marker::CUBE;
                 marker.action = visualization_msgs::Marker::ADD;
-                marker.pose.position.x = dx;
-                marker.pose.position.y = dy;
+                marker.pose.position.x = vis_x;
+                marker.pose.position.y = vis_y;
                 marker.pose.position.z = 0;
                 marker.scale.x = 0.07;
                 marker.scale.y = 0.07;
@@ -364,7 +384,7 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
                 prev_yaw = curr_yaw;
                 prev_dist = dist;
                 break;
-            }
+            }/*
             else {
                 float final_dist, final_yaw;
                  if (same_cone.size() == 1)
@@ -378,10 +398,11 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
                     final_yaw = start_yaw + min_angle_ + (i - int(same_cone.size() / 2)) * angle_increment_;
                 }
                 same_cone.clear();
-            }
+            }*/
             dist += map_.info.resolution;
         }
     }
+    //ROS_WARN("number of predicted scan markers is %d", int(predicted_scan_.markers.size()));
     Observations obs;
     obs.ranges = ranges;
     obs.angles = angles;
