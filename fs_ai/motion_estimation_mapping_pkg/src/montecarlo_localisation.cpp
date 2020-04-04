@@ -39,12 +39,6 @@ float MCL::amcl_estimation_step(const Eigen::Vector3f& xEst, const std::vector<f
     filtered_scan_pub_.publish(filtered_scan_);
     predicted_scan_pub_.publish(predicted_scan_);
 
-    //CHECK THAT THERE IS SAME NUMBER OF DETECTIONS FOR MAP AND SENSOR
-    //THE SENSOR ONES START FROM VELODYNE SO DO THE SAME FOR MAP ONE 
-    //SINCE VELODYNE CANNOT SEE ANYTHING BETWEEN THE VELODYNE AND THE CAR BASE 
-    //INCREASE THE LANDMARK THRESHOLD INSIDE THE SLAM UTILS HEADER FILE 
-    //AND MAKE IT A LAUNCH PARAMETER SO IT IS MODIFIABLE AT RUN TIME
-
     ROS_WARN("filtered range size is %d, predicted scan size is %d", int(z.size()), int(z_pred.size()));
     if (z.size() == z_pred.size())
     {
@@ -222,20 +216,6 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
     std::vector<float> ranges, angles;
 
     
-    std::vector<int> js;
-    for(int j = 0; j != map_.data.size(); ++j)
-    {
-        if (map_.data[j] < 0 || map_.data[j] > 25)
-        {
-            js.push_back(j);
-            int cellY = j % map_.info.width;
-            int cellX = j / map_.info.width;
-            float x = (cellX * map_.info.resolution) + map_.info.origin.position.x;
-            float y = (cellY * map_.info.resolution) + map_.info.origin.position.y;
-            //ROS_WARN("POSE X: %f, Y: %f", x, y);
-        }
-    }
-
     Eigen::Matrix3f t(getBaseToVelodyneTF());
     Eigen::Matrix3f current_pose;
     current_pose << cosf(xEst(2)), -sinf(xEst(2)), xEst(0), sinf(xEst(2)), cosf(xEst(2)), xEst(1), 0, 0, 1;
@@ -243,8 +223,6 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
     float start_x = velodyne_pose(0, 2);
     float start_y = velodyne_pose(1, 2);
     float start_yaw = atan2f(start_y, start_x);
-
-    //float base_to_vel_dist = sqrtf(powf(t(0, 2), 2) + powf(t(1, 2), 2));
     
     std::vector<float> same_cone, same_cone2;
 
@@ -252,17 +230,16 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
     {
         if (i == num_intensities - 1)
         {
-            //std::cout << "length " << same_cone.size() << std::endl;
             float final_dist = same_cone[int(same_cone.size() / 2)];
             float final_yaw = same_cone2[int(same_cone2.size() / 2)];
+
             same_cone.clear();
             same_cone2.clear();
-            //std::cout << "size2 " << same_cone.size() << std::endl;
                     
             float vis_x = final_dist * cosf(final_yaw);
             float vis_y = final_dist * sinf(final_yaw);
 
-            visualization_msgs::Marker marker;
+            /*visualization_msgs::Marker marker;
             marker.header.frame_id = "velodyne";
             marker.header.stamp = ros::Time::now();
             marker.id = counter;
@@ -279,10 +256,7 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
             marker.color.b = 0.0f;
             marker.color.a = 1.0;
             predicted_scan_.markers.push_back(marker);
-            ++counter;
-
-            //std::cout << "x: " << vis_x << std::endl;
-            //std::cout << "y: " << vis_y << std::endl;
+            ++counter;*/
 
             ranges.push_back(final_dist);
             angles.push_back(final_yaw);
@@ -306,13 +280,13 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
             
             if (dx > max_range_ || dx < 0 || dy > max_range_ || dy < -max_range_)
             {
-                //ROS_WARN("dx: %f, dy: %f, max_range: %f", dx, dy, max_range_);
+                ROS_WARN("dx: %f, dy: %f, max_range: %f", dx, dy, max_range_);
                 break;
             }
 
             if (sqrtf(powf(dx, 2) + powf(dy, 2)) >= max_range_)
             {
-                //ROS_WARN("Euclidean dist: %f, max_range: %f", sqrtf(powf(dx, 2) + powf(dy, 2)), max_range_);
+                ROS_WARN("Euclidean dist: %f, max_range: %f", sqrtf(powf(dx, 2) + powf(dy, 2)), max_range_);
                 break;
             }
 
@@ -320,21 +294,10 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
             int cell_x = (x / map_.info.resolution) + (map_.info.width / 2);
             int cell_y = (y / map_.info.resolution) + (map_.info.height / 2);
 
-            //ROS_INFO("POSE X: %f, Y: %f", x, y);
-            //ROS_INFO("CELL X: %d, Y: %d", cell_x, cell_y);
-
             //get occupancy grid map array index 
             int idx = map_.info.width * cell_x + cell_y;
             
-            std::vector<int>::iterator it;
-            int count =0;
-            it = std::find(js.begin(), js.end(), idx);
-            if (it != js.end())
-            {
-                //std::cout << "Element found" << std::endl;
-                ++count;
-            }
-            
+            counter = 0;
             //check if cell is not free
             if (map_.data[idx] < 0 || map_.data[idx] > 25)
             {
@@ -354,8 +317,8 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
                 marker1.color.g = 0.0f;
                 marker1.color.b = 1.0f;
                 marker1.color.a = 1.0;
-                filtered_scan_.markers.push_back(marker1);*/
-                ++counter2;
+                filtered_scan_.markers.push_back(marker1);
+                ++counter2;*/
 
                 float final_dist, final_yaw;
                 //check if the previous is the neighbouring cell
@@ -363,6 +326,7 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
                 {
                     same_cone.push_back(dist);
                     same_cone2.push_back(curr_yaw);
+                    
                     prev_yaw = curr_yaw;
                     prev_dist = dist;
                     prev_pose = curr_pose;
@@ -373,9 +337,7 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
                 {
                     same_cone.push_back(dist);
                     same_cone2.push_back(curr_yaw);
-                    //std::cout << "size " << same_cone.size() << std::endl;
-                    //std::cout << (curr_pose - prev_pose).norm() << std::endl;
-                    //std::cout << same_cone.size() << std::endl;
+
                     prev_yaw = curr_yaw;
                     prev_dist = dist;
                     prev_pose = curr_pose;
@@ -396,12 +358,10 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
                     }
                     else if (same_cone.size() > 1)
                     {
-                        //std::cout << "length " << same_cone.size() << std::endl;
                         final_dist = same_cone[int(same_cone.size() / 2)];
                         final_yaw = same_cone2[int(same_cone2.size() / 2)];
                         same_cone.clear();
                         same_cone2.clear();
-                        //std::cout << "size2 " << same_cone.size() << std::endl;
 
                         same_cone.push_back(dist);
                         same_cone2.push_back(curr_yaw);
@@ -430,9 +390,6 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
                 predicted_scan_.markers.push_back(marker);
                 ++counter;
 
-                //std::cout << "x: " << vis_x << std::endl;
-                //std::cout << "y: " << vis_y << std::endl;
-
                 ranges.push_back(final_dist);
                 angles.push_back(final_yaw);
                 prev_yaw = curr_yaw;
@@ -442,8 +399,6 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
             dist += map_.info.resolution;
         }
     }
-    //std::cout << "total " << counter2 << std::endl;
-    //ROS_WARN("number of predicted scan markers is %d", int(predicted_scan_.markers.size()));
     Observations obs;
     obs.ranges = ranges;
     obs.angles = angles;

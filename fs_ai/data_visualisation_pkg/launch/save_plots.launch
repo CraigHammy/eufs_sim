@@ -1,0 +1,8 @@
+<launch>
+    <arg name="input_path" default="$(find motion_estimation_mapping_pkg)/cfg/data1.csv"/>
+    <arg name="output_path" default="$(find data_visualisation_pkg)/cfg/plot1.png"/>
+    <node pkg="data_visualisation_pkg" type="plot_csv.py" name="vis_data_node" output="screen">
+        <param name="input_path" value="$(arg input_path)" type="str"/>
+        <param name="output_path" value="$(arg output_path)" type="str"/>
+    </node>
+</launch>

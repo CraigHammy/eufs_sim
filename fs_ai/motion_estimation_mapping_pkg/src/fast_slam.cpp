@@ -69,6 +69,8 @@ void StateEstimation::initialise()
     private_nh_.getParam("slam_measurement_noise_euclidean_distance", sigmaR);
     private_nh_.getParam("slam_measurement_noise_angle_difference", sigmaB);
     private_nh_.getParam("resampling_ratio_particles", resampling_ratio_);
+    private_nh_.getParam("output_file_path", csv_file_path_);
+    private_nh_.getParam("unknown_landmark_threshold", NEW_LANDMARK_THRESH_);
 
     //initialise control noise covariance matrix
     Q_ << powf(sigmaV, 2), 0, 0, powf(sigmaG * M_PI / 180, 2);

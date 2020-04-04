@@ -7,6 +7,8 @@
 #include <Eigen/Core>
 #include <tf/transform_listener.h>
 #include <tf/transform_datatypes.h>
+#include <fstream>
+#include <iostream>
 
 enum SLAM_PHASE {
     MAP_BUILDING,
@@ -82,5 +84,13 @@ Eigen::ArrayXf cumulativeSum(Eigen::ArrayXf weights);
  * @return An Eigen 2d vector describing the distance and angle to the landmark
  */
 Eigen::Vector2f getMeasurement(const geometry_msgs::Point::ConstPtr& observation);
+
+/**
+ * @brief Writes data to csv file
+ * @param filepath The file path name where the csv file will be saved
+ * @param num_columns Number of columns the csv file will have 
+ * @param input Vector which stores the data to put in the csv file 
+ */
+void writeToCSV(const std::string& filepath, int num_columns, std::vector<float> input);
 
 #endif

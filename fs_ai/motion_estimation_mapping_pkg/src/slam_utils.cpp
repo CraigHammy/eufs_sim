@@ -8,6 +8,8 @@
 #include <cmath>
 #include <vector>
 #include <Eigen/Core>
+#include <fstream>
+#include <iostream>
 
 /**
  * @brief Computes landmark EKF predicted observation, Jacobians wrt to landmark and robot locations and landmark innovation covariance
@@ -129,4 +131,30 @@ Eigen::Vector2f getMeasurement(const geometry_msgs::Point::ConstPtr& observation
     z << distance, final_yaw; 
 
     return z;
+}
+
+/**
+ * @brief Writes data to csv file
+ * @param filepath The file path name where the csv file will be saved
+ * @param num_columns Number of columns the csv file will have 
+ * @param input Vector which stores the data to put in the csv file 
+ */
+void writeToCSV(const std::string& filepath, int num_columns, std::vector<float> input)
+{
+    std::ofstream csv_file;
+    csv_file.open(filepath);
+    for (int i = 0; i != input.size(); ++i)
+    {
+        if (num_columns == 4)
+        {   
+            int j = i*num_columns;
+            csv_file << input[j+0] << "," << input[j+1] << "," << input[j+2] << "," << input[j+3] << std::endl;
+        }
+        else if (num_columns == 2)
+        {   
+            int j = i*num_columns;
+            csv_file << input[j+0] << "," << input[j+1] << std::endl;
+        }
+    }
+    csv_file.close();
 }

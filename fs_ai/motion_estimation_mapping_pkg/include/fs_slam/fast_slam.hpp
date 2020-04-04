@@ -201,6 +201,9 @@ private:
     float sigmaV, sigmaG;
     float sigmaR, sigmaB;
 
+    //unknown landmark threshold
+    int NEW_LANDMARK_THRESH_;
+
     //LaserScan intensities
     std::vector<float> scan_;
 
@@ -242,6 +245,10 @@ private:
     //landmark visualization variables
     sensor_msgs::PointCloud landmark_cloud_;
     std::map<std::string, int> landmark_vis_mappings_;
+
+    //csv file parameters
+    std::string csv_file_path_;
+    std::vector<float> csv_data_;
 };
 
 #endif
