@@ -16,7 +16,7 @@ git clone --recursive URL
 ```
 - Install ROS dependencies by navigating to the catkin workspace and doing
 ```bash
-rosdep install -i --from-path src/
+rosdep install -i --from-path src/ --rosdistro kinetic
 ```
 - Install Python dependencies:
 ```bash
