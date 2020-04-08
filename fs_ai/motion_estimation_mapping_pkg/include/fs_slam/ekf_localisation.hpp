@@ -33,6 +33,13 @@ public:
      * @return Eigen 3D vectors describing the x, y and yaw pose values of the robot after the motion model and after EKF sensor fusion 
      */
     Estimates ekf_estimation_step(const Eigen::Vector2f& u, float dt, float wb, const  Eigen::Vector3f& z);
+    
+    /**
+     * @brief Setter for the mean and covariance of the Extended Kalman Filter
+     * @param mu Eigen 5D vector representing the state of the Extended Kalman Filter 
+     * @param sigma Eigen 5x5 matrix representing the uncertainty on the state of the Extended Kalman Filter
+     */
+    void set_state(const Eigen::Matrix<float, 5, 1>& mu, const Eigen::Matrix<float, 5, 5>& sigma);
 
 private:
     /**

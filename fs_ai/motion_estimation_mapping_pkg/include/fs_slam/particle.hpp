@@ -17,7 +17,6 @@ public:
     Particle(int num_landmarks, EKF* ekf, MCL* mcl): num_lms(num_landmarks), mu_(Eigen::Vector3f::Zero()), sigma_(Eigen::Matrix3f::Identity()), ekf_(*ekf), mcl_(*mcl) {};
     Particle(EKF* ekf): num_lms(INT_MAX), mu_(Eigen::Vector3f::Zero()), mu_pred_(Eigen::Vector3f::Zero()), sigma_(Eigen::Matrix3f::Identity()), ekf_(*ekf) {};
     Particle(const Eigen::Vector3f mu, const Eigen::Vector3f mu_pred, Eigen::Matrix3f sigma, EKF* ekf, MCL *mcl): num_lms(INT_MAX), mu_(mu), mu_pred_(mu_pred), sigma_(sigma), ekf_(*ekf), mcl_(*mcl) {};
-
     /**
      * @brief State estimation prediction based on odometric and robot control state data
      * @param current_pose An Eigen 3D vector, describing the current pose estimate  

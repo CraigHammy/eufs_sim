@@ -13,8 +13,7 @@
 
     <include file="$(find geodetic_to_enu_conversion_pkg)/launch/conversion_launcher.launch"/>
 
-    <arg name="output_file_path"    default="$(find motion_estimation_mapping_pkg)/cfg/kinematicsvsgroundtruth.csv"/>
-
+    <arg name="csv_file_path"    default="$(find motion_estimation_mapping_pkg)/cfg/kinematicsvsgroundtruth.csv"/>
     <node pkg="motion_estimation_mapping_pkg" type="fast_slam" name="slam_server" output="screen">
         <param name="max_speed"       type="double" value="20.0"/>
         <param name="max_steering"    type="double" value="0.523599"/> <!-- 27.2 degs -->
@@ -43,6 +42,12 @@
         <param name="ekf_imu_noise_yaw"         type="double" value="1.0"/>
 
         <param name="csv_file_path" type="str"  value="$(arg csv_file_path)"/>
+
+        <param name="scan_min_range"        value="0.10000000149"       type="double"/>
+        <param name="scan_max_range"        value="5.5"                 type="double"/>
+        <param name="scan_min_angle"        value="-1.57079601288"      type="double"/>
+        <param name="scan_max_angle"        value="1.57079601288"       type="double"/>
+        <param name="scan_angle_increment"  value="0.00436111120507"    type="double"/>
     </node>
 
     <node pkg="motion_estimation_mapping_pkg" type="action_client" name="slam_client" output="screen"/>

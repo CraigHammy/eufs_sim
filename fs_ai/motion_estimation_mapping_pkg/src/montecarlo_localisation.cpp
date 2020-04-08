@@ -33,13 +33,18 @@ void MCL::initialise()
 float MCL::amcl_estimation_step(const Eigen::Vector3f& xEst, const std::vector<float>& scan)
 {
     //do it for every particle 
+    std::cout << xEst << std::endl;
+    std::cout << scan.size() << std::endl;
     std::vector<float> z(filterScan(xEst, scan).ranges);
-    
+    ROS_INFO("ciao");
     std::vector<float> z_pred(predictObservation(xEst, scan.size()).ranges);
-    filtered_scan_pub_.publish(filtered_scan_);
-    predicted_scan_pub_.publish(predicted_scan_);
+    ROS_INFO("ciao1");
+    
+    //filtered_scan_pub_.publish(filtered_scan_);
+    //predicted_scan_pub_.publish(predicted_scan_);
 
-    ROS_WARN("filtered range size is %d, predicted scan size is %d", int(z.size()), int(z_pred.size()));
+    /*ROS_WARN("filtered range size is %d, predicted scan size is %d", int(z.size()), int(z_pred.size()));
+    float average;
     if (z.size() == z_pred.size())
     {
         float sum = 0;
@@ -47,24 +52,26 @@ float MCL::amcl_estimation_step(const Eigen::Vector3f& xEst, const std::vector<f
         {
             sum += fabs(z_pred[i] - z[i]);
         }
-        float average = sum / z.size();
+        average = sum / z.size();
         ROS_WARN("average difference is %f", average);
-    }
+    }*/
 
     filtered_scan_.markers.clear();
     predicted_scan_.markers.clear();
-/*
+    ROS_INFO("ciao2");
+
     //calculate the difference 
-    Eigen::VectorXf differences;
+    Eigen::VectorXf differences(z.size());
     for(int i = 0; i != z.size(); ++i)
     {
+        ROS_INFO("ciao3");
         float difference = (z[i] - z_pred[i]);
         differences(i) = difference;
     }
-
+    ROS_INFO("ciao4");
     //squared norm of the difference
     float error = powf(differences.norm(), 2); 
-    return expf(error);*/
+    return expf(error);
 }
 
 /**
@@ -217,8 +224,10 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
 
     
     Eigen::Matrix3f t(getBaseToVelodyneTF());
+    ROS_INFO("hola");
     Eigen::Matrix3f current_pose;
     current_pose << cosf(xEst(2)), -sinf(xEst(2)), xEst(0), sinf(xEst(2)), cosf(xEst(2)), xEst(1), 0, 0, 1;
+    ROS_INFO("hola2");
     Eigen::Matrix3f velodyne_pose(current_pose*t);
     float start_x = velodyne_pose(0, 2);
     float start_y = velodyne_pose(1, 2);
@@ -228,6 +237,7 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
 
     for(int i = 0; i < num_intensities; ++i)
     {
+        //ROS_INFO("hola3");
         if (i == num_intensities - 1)
         {
             float final_dist = same_cone[int(same_cone.size() / 2)];
@@ -267,11 +277,15 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
         //ROS_INFO("current location x: %f, y: %f", xEst(0), xEst(1));
         float dist = min_range_;
         float max = max_range_;
+        //std::cout << max_range_ << std::endl;
         
         //ray tracing for each angle
         while (dist <= max)
         {
             //ROS_WARN("hello5");
+            //ROS_INFO("hola4");
+            //std::cout << dist << std::endl;
+            //std::cout << curr_yaw << std::endl;
             float dx = dist * cosf(curr_yaw);
             float dy = dist * sinf(curr_yaw);
             float x = start_x + dx;
@@ -286,6 +300,7 @@ Observations MCL::predictObservation(const Eigen::Vector3f& xEst, int num_intens
 
             if (sqrtf(powf(dx, 2) + powf(dy, 2)) >= max_range_)
             {
+                ROS_INFO("ciao");
                 ROS_WARN("Euclidean dist: %f, max_range: %f", sqrtf(powf(dx, 2) + powf(dy, 2)), max_range_);
                 break;
             }

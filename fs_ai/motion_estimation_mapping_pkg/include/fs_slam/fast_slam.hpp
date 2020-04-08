@@ -187,7 +187,7 @@ private:
     float max_steering_;
 
     //Time variables 
-    ros::Time last_time_, current_time_;
+    ros::Time last_time_, current_time_, initial_time_;
 
     //GPS x and y locations, and IMU yaw euler orientation
     float gps_x_, gps_y_;

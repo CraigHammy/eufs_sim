@@ -58,6 +58,7 @@ void StateEstimation::initialise()
     //instantiate time variables needed to work out time differences between FastSLAM2.0 iterations
     current_time_ = ros::Time::now();
     last_time_ = current_time_;
+    initial_time_ = ros::Time::now();
 
     //load parameters from ROS Param Server
     private_nh_.getParam("max_speed", max_speed_);
@@ -69,7 +70,7 @@ void StateEstimation::initialise()
     private_nh_.getParam("slam_measurement_noise_euclidean_distance", sigmaR);
     private_nh_.getParam("slam_measurement_noise_angle_difference", sigmaB);
     private_nh_.getParam("resampling_ratio_particles", resampling_ratio_);
-    private_nh_.getParam("output_file_path", csv_file_path_);
+    private_nh_.getParam("csv_file_path", csv_file_path_);
     private_nh_.getParam("unknown_landmark_threshold", NEW_LANDMARK_THRESH_);
 
     //initialise control noise covariance matrix
@@ -103,7 +104,7 @@ void StateEstimation::initialiseSubscribers()
     odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("/ground_truth/odom", 1, boost::bind(&StateEstimation::odomCallback, this, _1));
     wheel_speeds_sub_ = nh_.subscribe<eufs_msgs::WheelSpeedsStamped>("/ros_can/wheel_speeds", 1, boost::bind(&StateEstimation::wheelSpeedCallback, this, _1));
     cone_sub_ = nh_.subscribe<perception_pkg::Cone>("/cones", 1, boost::bind(&StateEstimation::coneCallback, this, _1));
-    ground_truth_cone_sub_ = nh_.subscribe<visualization_msgs::MarkerArray>("/ground_truth/cones/viz", 1, boost::bind(&StateEstimation::groundTruthConeCallback, this, _1));
+    //ground_truth_cone_sub_ = nh_.subscribe<visualization_msgs::MarkerArray>("/ground_truth/cones/viz", 1, boost::bind(&StateEstimation::groundTruthConeCallback, this, _1));
     gps_sub_ = nh_.subscribe<geodetic_to_enu_conversion_pkg::Gps>("/odometry/gps", 1, boost::bind(&StateEstimation::gpsCallback, this, _1));
     imu_sub_ = nh_.subscribe<sensor_msgs::Imu>("/imu", 1, boost::bind(&StateEstimation::imuCallback, this, _1));
     scan_sub_ = nh_.subscribe<sensor_msgs::LaserScan>("/laserscan", 1, boost::bind(&StateEstimation::scanCallback, this, _1));
@@ -128,11 +129,17 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
         //ros::Time finish = ros::Time::now();
         //std::cout << "frequency: " << 1/((finish - start).toSec()) << std::endl;
     }
+    odom_path_.poses.clear();
+    slam_path_.poses.clear();
+    pred_path_.poses.clear();
+    //writeToCSV(csv_file_path_, 4, csv_data_);
 
     //find particle with the highest weight 
     std::vector<Particle>::iterator p;
     int best_idx = 0;
     int best_weight = -1000;
+    EKF ekf_copy = particles_.at(0).ekf_;
+    Particle best_particle(&ekf_copy);
     int idx_counter = 0;
     for (p = particles_.begin(); p != particles_.end(); ++p, ++idx_counter)
     {
@@ -140,6 +147,7 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
         {
             best_idx = idx_counter;
             best_weight = p->weight_;
+            best_particle = *p;
         }
     }
 
@@ -148,11 +156,11 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
     particles_.at(best_idx).convertToPoints(map_ante, landmark_cloud_);
 
     //convert to PointCloud2 as it is less memory intensive
-    sensor_msgs::PointCloud2 cloud2;
-    sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud2);
+    //sensor_msgs::PointCloud2 cloud2;
+    //sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud2);
 
     //show pointcloud until command entered correctly
-    bool correct = false;
+    /*bool correct = false;
     do
     {   
         //publish landmark PointCloud2 message 
@@ -165,7 +173,7 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
         if (input == "yes")
             correct = true;
     }
-    while (!correct);
+    while (!correct);*/
 
     //convert Landmark vector to Point vector
     map_converter_pkg::ConvertMap service;
@@ -178,33 +186,49 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
     } else {
         ROS_ERROR("Failed to call service");
     }
-
+    
     std::vector<Particle> new_particles;
-    for (p = particles_.begin(); p != particles_.end(); ++p)
+    int mcl_particles = 1; //make it into a ros param 
+    for (int i = 0; i != mcl_particles; ++i)
     {
         EKF ekf(&private_nh_);
         boost::shared_ptr<nav_msgs::OccupancyGrid> map_ptr(new nav_msgs::OccupancyGrid(grid_map));
         MCL mcl(&private_nh_, map_ptr);
-        Particle particle(p->mu_, p->mu_pred_, p->sigma_, &ekf, &mcl);
+        Eigen::Matrix<float, 5, 1> new_mu;
+        new_mu <<  gps_x_, gps_y_, imu_yaw_, u_.speed, u_.steering_angle;
+        ekf.set_state(new_mu, Eigen::Matrix<float, 5, 5>::Identity());
+        Eigen::Vector3f new_mu2;
+        new_mu2 << gps_x_, gps_y_, imu_yaw_;
+        Particle particle(new_mu2, new_mu2, Eigen::Matrix3f::Identity(), &ekf, &mcl);
         new_particles.push_back(particle);
     }
     particles_ = new_particles;
+    //ROS_INFO("hello");
+    //ros::Time start, end;*/
 
     while(ros::ok())
     {
+        //start = ros::Time::now();
+        ROS_INFO("hello0");
         //Localization using Monte Carlo Algorithm 
         prediction();
 
         //UPDATE COVARIANCE MATRIX AND THEN SAMPLE FROM THAT DISTRUBUTION -> SHOULD WORK THEN UNLESS BUGS
-
-
+        ROS_INFO("hello1");
         for (p = particles_.begin(); p != particles_.end(); ++p)
         {
+            ROS_INFO("hello2");
             p->weight_ = p->mcl_.amcl_estimation_step(p->mu_, scan_);
+            ROS_INFO("hello2.5");
         }
-        resampling();
+        calculateFinalEstimate();
+        //ROS_INFO("hello3");
+        //resampling();
+        //ROS_INFO("hello4");
+        //end = ros::Time::now();
+        //std::cout << "frequency is " << 1/((end - start).toSec()) << std::endl;
     }
-
+    ROS_INFO("hello5");
     as_.setSucceeded();
 }
 
@@ -326,7 +350,7 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
     if ((colour == "orange") && (particles_.at(0).landmarks_.size() > 20)) {
         lap_closure_detected_ = true;
     }
-    
+    /*
    
     //publish the cone detections as markers
     visualization_msgs::Marker marker;
@@ -347,7 +371,7 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
     marker.color.a = 1.0;
     cone_array_.markers.push_back(marker);
     cone_array_pub_.publish(cone_array_);
-    ++cone_counter_;
+    ++cone_counter_;*/
 }
 
 /**
@@ -443,6 +467,9 @@ void StateEstimation::prediction()
 
         //EKF motion model state vector (before GPS/IMU measurement update)
         p->mu_pred_ = e.xPred;
+
+        csv_data_.push_back((ros::Time::now() - initial_time_).toSec());
+        csv_data_.push_back((ground_truth_ - p->mu_pred_).norm());
     }
 
     //check if visualization is requested by user
@@ -585,32 +612,38 @@ void StateEstimation::resampling()
     //normalize weights
     normaliseWeights();
 
+    int num_particles = particles_.size();
+
     //vector of weights
-    Eigen::ArrayXf weights(num_particles_);
+    //ROS_INFO("hallo1");
+    Eigen::ArrayXf weights(num_particles);
+    //ROS_INFO("hallo2");
     int count = 0;
     std::vector<Particle>::const_iterator p;
     for (p = particles_.begin(); p != particles_.end(); ++p, ++count) {
+        //ROS_INFO("hallo3");
         weights(count) = p->weight_;
     }
 
     //effective particle number and minimum number of particles
     float Neff = 1.0 / (weights.pow(2).sum());
-    float Nmin = num_particles_ * resampling_ratio_;
+    //ROS_INFO("hallo4");
+    float Nmin = num_particles * resampling_ratio_;
 
     //vector for new set of particles
     std::vector<Particle> new_particles;
-    for (int i = 0; i != num_particles_; ++i)
+    for (int i = 0; i != num_particles; ++i)
     {
         EKF ekf(&private_nh_);
         Particle p(&ekf);
         new_particles.push_back(p);
-
     }
 
     //vector of cumulative weights
-    Eigen::ArrayXf weights_cumulative(num_particles_);
-    Eigen::ArrayXf resample_base(num_particles_);
-    Eigen::ArrayXf resample_ids(num_particles_);
+    Eigen::ArrayXf weights_cumulative(num_particles);
+    Eigen::ArrayXf resample_base(num_particles);
+    Eigen::ArrayXf resample_ids(num_particles);
+    //ROS_INFO("hallo5");
 
     //uniform distribution object
     boost::random::uniform_real_distribution<float> distribution(0.0, 1.0);
@@ -619,13 +652,13 @@ void StateEstimation::resampling()
     {
         weights_cumulative << cumulativeSum(weights);
         //cumulative vector from 0 to [1 - (1 / NPARTICLES)] in steps of 1 / NPARTICLES
-        resample_base << cumulativeSum(weights * 0.0 + 1.0 / num_particles_) - 1.0 / num_particles_;
+        resample_base << cumulativeSum(weights * 0.0 + 1.0 / num_particles) - 1.0 / num_particles;
         //add to every cumulative sum a number from uniform random distribution(0.0, 1.0 / NPARTICLES)
-        resample_ids << resample_base + distribution(rng) / num_particles_;
+        resample_ids << resample_base + distribution(rng) / num_particles;
 
         int count = 0;
-        Eigen::VectorXd indexes(num_particles_);
-        for (int i = 0; i != num_particles_; ++i)
+        Eigen::VectorXd indexes(num_particles);
+        for (int i = 0; i != num_particles; ++i)
         {
             //see where each resample random number fits in the cumulative sum bins
             while ((count <= weights_cumulative.size() - 1) && (resample_ids(count) < weights_cumulative(i)))
@@ -647,7 +680,7 @@ void StateEstimation::resampling()
             particles_.at(i).landmarks_ = particles_copy.at(indexes(i)).landmarks_;
 
             //reinitialise the weights so their sum adds up to 1
-            particles_.at(i).weight_ = 1.0 / num_particles_;       
+            particles_.at(i).weight_ = 1.0 / num_particles;       
         }
     }
 }
@@ -698,7 +731,7 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
         //append euclidean distance to starting point
         distances.push_back((p->mu_ - Eigen::Vector3f::Zero()).norm());   
 
-        std::vector<Landmark>::const_iterator landmark;
+        /*std::vector<Landmark>::const_iterator landmark;
         for(landmark = p->landmarks_.begin(); landmark != p->landmarks_.end(); ++landmark)
         {
             //add new landmark to landmark cloud for visualization
@@ -713,7 +746,7 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
         //publish landmark PointCloud2 message
         sensor_msgs::PointCloud2 cloud;
         sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
-        landmark_cloud_pub_.publish(cloud);  
+        landmark_cloud_pub_.publish(cloud);  */
     }
 
      //check for loop closure 

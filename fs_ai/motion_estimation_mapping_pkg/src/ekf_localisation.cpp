@@ -38,6 +38,17 @@ void EKF::initialise()
 }
 
 /**
+ * @brief Setter for the mean and covariance of the Extended Kalman Filter
+ * @param mu Eigen 5D vector representing the state of the Extended Kalman Filter 
+ * @param sigma Eigen 5x5 matrix representing the uncertainty on the state of the Extended Kalman Filter
+ */
+void EKF::set_state(const Eigen::Matrix<float, 5, 1>& mu, const Eigen::Matrix<float, 5, 5>& sigma)
+{
+    mu_ = mu;
+    sigma_ = sigma;
+}
+
+/**
  * @brief Extended Kalman Filter step: prediction and measurement update (correction)
  * @param u Eigen 2D vector describing the robot control input: linear velocity and steering angle
  * @param dt Change in time (seconds) from previous step

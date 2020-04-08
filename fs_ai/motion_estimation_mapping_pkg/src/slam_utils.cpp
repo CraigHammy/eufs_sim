@@ -142,7 +142,7 @@ Eigen::Vector2f getMeasurement(const geometry_msgs::Point::ConstPtr& observation
 void writeToCSV(const std::string& filepath, int num_columns, std::vector<float> input)
 {
     std::ofstream csv_file;
-    csv_file.open(filepath);
+    csv_file.open(filepath.c_str());
     for (int i = 0; i != input.size(); ++i)
     {
         if (num_columns == 4)
