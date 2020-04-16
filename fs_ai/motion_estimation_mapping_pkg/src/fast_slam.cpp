@@ -116,15 +116,16 @@ void StateEstimation::initialiseSubscribers()
  */
 void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoal::ConstPtr& goal)
 {
+    //ros::Time start = ros::Time::now();
+    int csv_columns = 6;
     while(!lap_closure_detected_)
     {
-        //ros::Time start = ros::Time::now();
         if (control_start_ && gps_start_ && imu_start_)
         {
             prediction();
             correction(MAP_BUILDING);
             calculateFinalEstimate();
-            resampling();
+            resampling();    
         }
         //ros::Time finish = ros::Time::now();
         //std::cout << "frequency: " << 1/((finish - start).toSec()) << std::endl;
@@ -132,7 +133,7 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
     odom_path_.poses.clear();
     slam_path_.poses.clear();
     pred_path_.poses.clear();
-    //writeToCSV(csv_file_path_, 4, csv_data_);
+    writeToCSV(csv_file_path_, csv_columns, csv_data_);
 
     //find particle with the highest weight 
     std::vector<Particle>::iterator p;
@@ -186,7 +187,7 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
     } else {
         ROS_ERROR("Failed to call service");
     }
-    
+    /*
     std::vector<Particle> new_particles;
     int mcl_particles = 1; //make it into a ros param 
     for (int i = 0; i != mcl_particles; ++i)
@@ -205,7 +206,7 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
     particles_ = new_particles;
     //ROS_INFO("hello");
     //ros::Time start, end;*/
-
+    /*
     while(ros::ok())
     {
         //start = ros::Time::now();
@@ -228,7 +229,7 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
         //end = ros::Time::now();
         //std::cout << "frequency is " << 1/((end - start).toSec()) << std::endl;
     }
-    ROS_INFO("hello5");
+    ROS_INFO("hello5");*/
     as_.setSucceeded();
 }
 
@@ -350,7 +351,7 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
     if ((colour == "orange") && (particles_.at(0).landmarks_.size() > 20)) {
         lap_closure_detected_ = true;
     }
-    /*
+    
    
     //publish the cone detections as markers
     visualization_msgs::Marker marker;
@@ -371,7 +372,7 @@ void StateEstimation::coneCallback(const perception_pkg::Cone::ConstPtr& msg)
     marker.color.a = 1.0;
     cone_array_.markers.push_back(marker);
     cone_array_pub_.publish(cone_array_);
-    ++cone_counter_;*/
+    ++cone_counter_;
 }
 
 /**
@@ -468,6 +469,10 @@ void StateEstimation::prediction()
         //EKF motion model state vector (before GPS/IMU measurement update)
         p->mu_pred_ = e.xPred;
 
+        csv_data_.push_back(p->mu_pred_(0));
+        csv_data_.push_back(p->mu_pred_(1));
+        csv_data_.push_back(ground_truth_(0));
+        csv_data_.push_back(ground_truth_(1));
         csv_data_.push_back((ros::Time::now() - initial_time_).toSec());
         csv_data_.push_back((ground_truth_ - p->mu_pred_).norm());
     }
@@ -731,7 +736,7 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
         //append euclidean distance to starting point
         distances.push_back((p->mu_ - Eigen::Vector3f::Zero()).norm());   
 
-        /*std::vector<Landmark>::const_iterator landmark;
+        std::vector<Landmark>::const_iterator landmark;
         for(landmark = p->landmarks_.begin(); landmark != p->landmarks_.end(); ++landmark)
         {
             //add new landmark to landmark cloud for visualization
@@ -746,7 +751,7 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
         //publish landmark PointCloud2 message
         sensor_msgs::PointCloud2 cloud;
         sensor_msgs::convertPointCloudToPointCloud2(landmark_cloud_, cloud);
-        landmark_cloud_pub_.publish(cloud);  */
+        landmark_cloud_pub_.publish(cloud);  
     }
 
      //check for loop closure 

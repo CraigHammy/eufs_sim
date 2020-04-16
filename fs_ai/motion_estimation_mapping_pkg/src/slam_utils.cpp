@@ -141,11 +141,46 @@ Eigen::Vector2f getMeasurement(const geometry_msgs::Point::ConstPtr& observation
  */
 void writeToCSV(const std::string& filepath, int num_columns, std::vector<float> input)
 {
+    //retrieve number of columns from first entry 
+    //std::cout << input.size() << std::endl;
+    //int columns = int(input.at(0));
+    //input.erase(input.begin());
+
+    //creare CSV file stream 
     std::ofstream csv_file;
     csv_file.open(filepath.c_str());
+
+    //csv_file << "Ground-Truth x (m)" << "," << "Ground-Truth y (m)" << "," << "Prediction x (m)" << "," << 
+    //            "Prediction y (m)" << "," << "Time (s)" << "," << "Error (m)" << std::endl;
+
     for (int i = 0; i != input.size(); ++i)
     {
-        if (num_columns == 4)
+        /*
+        int k = i*num_columns;
+        
+        for (int j = 0; j !=num_columns; ++j)
+        {
+            csv_file << input[k+j]; 
+            ROS_INFO("index: %d, value: %f", k+j, input[k+j]);
+            if (j == num_columns-1)
+            {
+                csv_file << std::endl;
+            }
+            else
+            {
+                csv_file << ",";
+            }
+        }*/
+        
+        if (num_columns == 6)
+        {   
+            int j = i*num_columns;
+            if ((input[((i-1)*num_columns) + 4] > 50.0) && (fabs(input[((i-1)*num_columns) + 4] - input[j+4]) > 2.0))
+                break;
+            csv_file << input[j+0] << "," << input[j+1] << "," << input[j+2] << "," << input[j+3] << ","
+                << input[j+4] << "," << input[j+5] << std::endl;
+        }
+        else if (num_columns == 4)
         {   
             int j = i*num_columns;
             csv_file << input[j+0] << "," << input[j+1] << "," << input[j+2] << "," << input[j+3] << std::endl;
@@ -155,6 +190,7 @@ void writeToCSV(const std::string& filepath, int num_columns, std::vector<float>
             int j = i*num_columns;
             csv_file << input[j+0] << "," << input[j+1] << std::endl;
         }
+        
     }
     csv_file.close();
 }
