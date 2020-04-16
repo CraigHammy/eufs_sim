@@ -171,6 +171,9 @@ void writeToCSV(const std::string& filepath, int num_columns, std::vector<float>
                 csv_file << ",";
             }
         }*/
+        if (i == 0)
+            csv_file << "Ground-Truth x (m)" << "," << "Ground-Truth y (m)" << "," << "Prediction x (m)" << "," << 
+              "Prediction y (m)" << "," << "Time (s)" << "," << "Error (m)" << std::endl;
         
         if (num_columns == 6)
         {   
