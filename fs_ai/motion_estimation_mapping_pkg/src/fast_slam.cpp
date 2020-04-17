@@ -117,7 +117,7 @@ void StateEstimation::initialiseSubscribers()
 void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoal::ConstPtr& goal)
 {
     //ros::Time start = ros::Time::now();
-    int csv_columns = 6;
+    int csv_columns = 2;
     while(!lap_closure_detected_)
     {
         if (control_start_ && gps_start_ && imu_start_)
@@ -133,7 +133,6 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
     odom_path_.poses.clear();
     slam_path_.poses.clear();
     pred_path_.poses.clear();
-    writeToCSV(csv_file_path_, csv_columns, csv_data_);
 
     //find particle with the highest weight 
     std::vector<Particle>::iterator p;
@@ -151,6 +150,15 @@ void StateEstimation::executeCB(const motion_estimation_mapping_pkg::FastSlamGoa
             best_particle = *p;
         }
     }
+
+    std::vector<Landmark>::const_iterator lm;
+    for (lm = best_particle.landmarks_.begin(); lm != best_particle.landmarks_.end(); ++lm)
+    {
+        csv_data_.push_back(lm->mu_(0));
+        csv_data_.push_back(lm->mu_(1));
+    }
+
+    writeToCSV(csv_file_path_, csv_columns, csv_data_);
 
     //generate map of Points and add points to landmark cloud
     std::vector<geometry_msgs::Point> map_ante;
@@ -468,13 +476,15 @@ void StateEstimation::prediction()
 
         //EKF motion model state vector (before GPS/IMU measurement update)
         p->mu_pred_ = e.xPred;
-
+        /*
         csv_data_.push_back(p->mu_pred_(0));
         csv_data_.push_back(p->mu_pred_(1));
+        csv_data_.push_back(p->mu_(0));
+        csv_data_.push_back(p->mu_(1));
         csv_data_.push_back(ground_truth_(0));
         csv_data_.push_back(ground_truth_(1));
         csv_data_.push_back((ros::Time::now() - initial_time_).toSec());
-        csv_data_.push_back((ground_truth_ - p->mu_pred_).norm());
+        csv_data_.push_back((ground_truth_ - p->mu_).norm());*/
     }
 
     //check if visualization is requested by user
@@ -754,10 +764,10 @@ Eigen::Vector3f StateEstimation::calculateFinalEstimate()
         landmark_cloud_pub_.publish(cloud);  
     }
 
-     //check for loop closure 
+    //check for loop closure 
     float average = std::accumulate(distances.begin(), distances.end(), 0.0) / num_particles_;
-    std::cout << "number of landmarks: " << particles_.at(0).landmarks_.size() << std::endl; 
-    if ((average < 1.0) && (particles_.at(0).landmarks_.size() > 20))
+    //std::cout << "number of landmarks: " << particles_.at(0).landmarks_.size() << std::endl; 
+    if ((average < 1.0) && (particles_.at(0).landmarks_.size() > 30))
         lap_closure_detected_ = true;
    
 

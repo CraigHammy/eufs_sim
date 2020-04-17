@@ -171,11 +171,21 @@ void writeToCSV(const std::string& filepath, int num_columns, std::vector<float>
                 csv_file << ",";
             }
         }*/
-        if (i == 0)
-            csv_file << "Ground-Truth x (m)" << "," << "Ground-Truth y (m)" << "," << "Prediction x (m)" << "," << 
-              "Prediction y (m)" << "," << "Time (s)" << "," << "Error (m)" << std::endl;
+        //if (i == 0)
+        //    csv_file << "Ground-Truth x (m)" << "," << "Ground-Truth y (m)" << "," << "Prediction x (m)" << "," << 
+        //      "Prediction y (m)" << "," << "Time (s)" << "," << "Error (m)" << std::endl;
         
-        if (num_columns == 6)
+        if (num_columns == 8)
+        {   
+            int j = i*num_columns;
+
+            if ((input[((i-1)*num_columns) + 6] > 50.0) && (fabs(input[((i-1)*num_columns) + 6] - input[j+6]) > 2.0))
+                break;
+
+            csv_file << input[j+0] << "," << input[j+1] << "," << input[j+2] << "," << input[j+3] << ","
+                << input[j+4] << "," << input[j+5] << "," << input[j+6] << "," << input[j+7] << std::endl;
+        }
+        else if (num_columns == 6)
         {   
             int j = i*num_columns;
             if ((input[((i-1)*num_columns) + 4] > 50.0) && (fabs(input[((i-1)*num_columns) + 4] - input[j+4]) > 2.0))
@@ -190,6 +200,8 @@ void writeToCSV(const std::string& filepath, int num_columns, std::vector<float>
         }
         else if (num_columns == 2)
         {   
+            if (i == 0)
+                csv_file << "Landmark x (m)" << "," << "Landmark y (m)" << std::endl;
             int j = i*num_columns;
             csv_file << input[j+0] << "," << input[j+1] << std::endl;
         }

@@ -13,7 +13,7 @@
 
     <include file="$(find geodetic_to_enu_conversion_pkg)/launch/conversion_launcher.launch"/>
 
-    <arg name="csv_file_path"    default="$(find motion_estimation_mapping_pkg)/cfg/kinematicsvsgroundtruth.csv"/>
+    <arg name="csv_file_path"    default="$(find motion_estimation_mapping_pkg)/cfg/landmarkmaplower.csv"/>
     <node pkg="motion_estimation_mapping_pkg" type="fast_slam" name="slam_server" output="screen">
         <param name="max_speed"       type="double" value="20.0"/>
         <param name="max_steering"    type="double" value="0.523599"/> <!-- 27.2 degs -->
@@ -26,7 +26,7 @@
         <param name="slam_measurement_noise_euclidean_distance" type="double" value="1.0"/>
         <param name="slam_measurement_noise_angle_difference"   type="double" value="20.0"/>
 
-        <param name="unknown_landmark_threshold"    type="double"   value="0.3"/>
+        <!--param name="unknown_landmark_threshold"    type="double"   value="0.3"/-->
 
         <param name="resampling_ratio_particles"                type="double" value="0.75"/>
 

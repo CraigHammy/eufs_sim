@@ -126,6 +126,7 @@ void Particle::measurementUpdate(const perception_pkg::Cone& z, const Eigen::Mat
     }
     else
     {
+        ROS_WARN("%f",best_p);
         DataAssociation d;
         d.measurement = measurement;
         d.landmark_id = best_arg;
